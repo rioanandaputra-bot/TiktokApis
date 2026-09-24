@@ -58,6 +58,9 @@ function loadProfile() {
     const merged = { ...DEFAULT_PROFILE, ...custom };
     for (const key of ["lucifer", "navigator", "screen"]) merged[key] = { ...DEFAULT_PROFILE[key], ...(custom[key] || {}) };
     if (nativeProcess.env.TIKTOK_BSID_UA) merged.navigator.userAgent = nativeProcess.env.TIKTOK_BSID_UA;
+    // A long-lived signer boots once for every shop; its boot must not ask /bs/rt for a
+    // token on nobody's behalf.
+    if (nativeProcess.env.TIKTOK_BSID_RT_PASSTHROUGH === "0") merged.rt_passthrough = false;
     return merged;
 }
 const PROFILE = loadProfile();

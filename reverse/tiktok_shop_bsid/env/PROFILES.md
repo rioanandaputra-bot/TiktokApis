@@ -24,10 +24,17 @@ header, and the UA X-Bogus/X-Gnarly were computed with).
 
 ## bsid.js
 
-stdin `{"cookie", "requests": [{"method", "url", "body"}]}` -> stdout
+One-shot: stdin `{"cookie", "requests": [{"method", "url", "body"}]}` -> stdout
 `{"bsids", "bs_token", "cookie"}`. `url` is the final pre-sign URL (msToken, X-Bogus,
 X-Gnarly already in place); append `&X-Tts-Oec-Bsid=<bsid>` and send the request with
-`oec_lucifer=<bs_token>`. One boot signs any number of requests.
+`oec_lucifer=<bs_token>`. One boot (~1.2 s) signs any number of requests; with no
+`oec_lucifer` in the cookie and `rt_passthrough` on, the SDK fetches the token first.
+
+`--serve`: boot once, then one JSON object per line, for any session:
+`{"id", "cookie", "ua"?, "requests"}` -> `{"id", "bsids"}` or `{"id", "error"}`. The
+cookie must carry the session's `oec_lucifer` (mint it with a one-shot run); the boot
+itself never calls `/bs/rt`. ~2 ms per BSID, ~70 MB resident. Swapping cookie, token and
+UA per line was checked to give each session its own token in the BSID.
 
 ## affiliate-id
 
