@@ -6,20 +6,19 @@ query and body sent, a BSID for exactly that URL -- and what to do when TikTok p
 which cookies, device and proxy a shop has, how its session is refreshed or re-minted, what
 "needs re-auth" means -- comes from a `Host` the application implements.
 
-Recovery, per request (at most MAX_SOLVE_ATTEMPTS challenge rounds, never looping):
+Recovery, per request (at most MAX_RECOVERY_ROUNDS recovery rounds, never looping):
   401/403                  -> host.refresh_auth, retry once;
-  bdturing challenge        -> drop the bs token, solve the captcha (host.solve_captcha) and
-                               retry; failing that, on a first try re-mint ttwid and retry; on a
+  bdturing challenge        -> drop the bs token; on a first try re-mint ttwid and retry; on a
                                retry re-mint the whole device -- queued when a user waits (the
                                job decides on re-auth), inline in background jobs, and if that
-                               fails too -> host.needs_reauth.
+                               fails too -> host.needs_reauth. There is no captcha solver: a
+                               challenge has so far always meant a malformed request, so each
+                               one is logged with its endpoint.
 """
 import base64
 import gzip
 import json
 import logging
-import threading
-import time
 import urllib.parse
 import zlib
 from typing import Any, Dict, List, Optional, Protocol, Tuple
@@ -33,8 +32,7 @@ from .web import browser_urlencode, client_hints
 
 logger = logging.getLogger("tiktok_shop.client")
 
-MAX_SOLVE_ATTEMPTS = 2
-RECENT_SOLVE_S = 15.0
+MAX_RECOVERY_ROUNDS = 2
 # Response codes TikTok uses to ask for verification, with the conf in `data`.
 _CHALLENGE_CODES = (10000, 10005, 40001, 98001004)
 
@@ -204,7 +202,6 @@ class Host(Protocol):
     def set_cookie(self, key: str, name: str, value: str, domain: str) -> None: ...
     def reset(self, key: str) -> None: ...                           # drop cached jar/session
     def refresh_auth(self, key: str) -> None: ...                    # after 401/403
-    def solve_captcha(self, key: str, conf: Dict[str, Any]) -> bool: ...
     def remint_ttwid(self, key: str) -> bool: ...
     def remint_device(self, key: str) -> bool: ...                   # inline, slow (~14 s)
     def queue_device_remint(self, key: str) -> None: ...
@@ -218,13 +215,6 @@ class Client:
     def __init__(self, host: Host, bsid: Bsid):
         self.host = host
         self.bsid = bsid
-        self._solve_locks: Dict[str, threading.RLock] = {}
-        self._solve_locks_guard = threading.Lock()
-        self.last_solved: Dict[str, float] = {}
-
-    def _solve_lock(self, key: str) -> threading.RLock:
-        with self._solve_locks_guard:
-            return self._solve_locks.setdefault(key, threading.RLock())
 
     def signed_call(self, method: str, base_url: str, key: str, query: Any, body: Any = None,
                     headers: Optional[Dict[str, str]] = None, sign_body: bool = True) -> bytes:
@@ -240,7 +230,7 @@ class Client:
     def request(self, method: str, url: str, key: Optional[str], data: Any = None,
                 headers: Optional[Dict[str, str]] = None, is_json: bool = True,
                 signed_body: Optional[str] = None, _is_retry: bool = False,
-                _solve_attempts: int = 0) -> bytes:
+                _rounds: int = 0) -> bytes:
         """Send one request for session `key` with its cookies; recover as the module says."""
         if "X-Bogus=" in url:
             if not key:
@@ -275,7 +265,7 @@ class Client:
 
         def retry(new_url: str, attempts: int) -> bytes:
             return self.request(method, new_url, key, data=data, headers=headers, is_json=is_json,
-                                signed_body=signed_body, _is_retry=True, _solve_attempts=attempts)
+                                signed_body=signed_body, _is_retry=True, _rounds=attempts)
 
         def resigned() -> str:
             return resign_url(url, body_text(data) if signed_body is None else signed_body, self.host.device(key))
@@ -285,38 +275,26 @@ class Client:
             try:
                 self.host.refresh_auth(key)
                 self.host.reset(key)
-                return retry(url, _solve_attempts)
+                return retry(url, _rounds)
             except Exception as e:
                 logger.warning("[client] refresh retry for %s failed: %s", key, e)
 
         conf = challenge_conf(resp.headers, resp.content) if key else None
         if not conf:
             return resp.content
+        logger.warning("[client] bdturing challenge for %s on %s %s (attempt %d)", key, method,
+                       urllib.parse.urlsplit(url).path, _rounds)
         self.bsid.forget(key)                      # a refusal may mean the bs token went stale
-        if _solve_attempts >= MAX_SOLVE_ATTEMPTS:
-            logger.warning("[client] challenge persisted after %d solves for %s; needs re-auth", _solve_attempts, key)
+        if _rounds >= MAX_RECOVERY_ROUNDS:
+            logger.warning("[client] challenge persisted after %d re-mints for %s; needs re-auth", _rounds, key)
             self.host.needs_reauth(key)
             return resp.content
-
-        solved = False
-        try:
-            with self._solve_lock(key):
-                if _solve_attempts == 0 and time.time() - self.last_solved.get(key, 0) < RECENT_SOLVE_S:
-                    solved = True                  # another thread just solved it for this session
-                elif self.host.solve_captcha(key, json.loads(conf)):
-                    self.last_solved[key] = time.time()
-                    logger.info("[client] solved the captcha for %s, retrying", key)
-                    solved = True
-        except Exception as e:
-            logger.warning("[client] captcha solver failed for %s: %s", key, e)
-        if solved:
-            return retry(resigned(), _solve_attempts + 1)
 
         if not _is_retry:
             try:
                 if self.host.remint_ttwid(key):
                     self.host.reset(key)
-                    return retry(resigned(), _solve_attempts + 1)
+                    return retry(resigned(), _rounds + 1)
             except Exception as e:
                 logger.warning("[client] ttwid re-mint for %s failed: %s", key, e)
             return resp.content                    # the caller sees TikTok's answer; next call retries
@@ -333,7 +311,7 @@ class Client:
             try:
                 if self.host.remint_device(key):
                     self.host.reset(key)
-                    return retry(resigned(), _solve_attempts + 1)
+                    return retry(resigned(), _rounds + 1)
             except Exception as e:
                 logger.warning("[client] device re-mint for %s failed: %s", key, e)
         self.host.needs_reauth(key)

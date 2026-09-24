@@ -142,7 +142,6 @@ url = f"{pre_sign_url}&X-Tts-Oec-Bsid={bsid}"
 | `bsid.py` | X-Tts-Oec-Bsid 与 bs token（经 `signing/lucifer_bsid.py`，token 可放入共享存储） |
 | `client.py` | 通用 query、请求头、X-Bogus/X-Gnarly 签名 URL、响应解码、bdturing 识别，以及多会话请求客户端（401/403、验证码、ttwid/设备重铸等恢复流程，由宿主应用通过 `Host` 提供存储与动作） |
 | `login.py` | 子账号邀请激活、登录、验证码（verify-sg）、OTP、会话导出 |
-| `captcha.py` | Affiliate Center 滑块验证码（SDK 3.x，经 `js/captcha_oracle.js` 加解密） |
 | `device_mint.py` | 无浏览器生成设备 cookie（`js/mint_svwebid.js`） |
 | `im/protobuf.py`, `im/frontier.py` | IM 请求/消息编码、Frontier 握手与推送解码 |
 | `im/rest.py` | IM 主机上的会话列表、消息、发送（文本/图片/商品卡）、已读、搜索、创建会话 |

@@ -134,8 +134,6 @@ BSID_PROFILES = {
 }
 
 # ============================================================================ captcha
-# Two SDK generations answer bdturing decision confs, and each page uses its own.
-#
 # Login (seller center account_login/v3): the 2.x SDK on verify-sg -- plain JSON
 # /captcha/get + /captcha/verify, no msToken or X-Bogus/X-Gnarly on either call.
 # Source: a real sub-account login in Chrome on 24 Sep 2026 (3d challenge, "Verification
@@ -149,27 +147,14 @@ CAPTCHA_LOGIN_CHECK_VERSION = "3.8.21-alpha.2"
 CAPTCHA_LOGIN_APP_NAME = "TikTokAds_SSO"
 CAPTCHA_LOGIN_IMG_W = 348
 #
-# Affiliate Center: the 3.x h5 SDK "oec-captcha-ttweb" -- challenge and answer encrypted,
-# run headless from the copies in reverse/oec_captcha/vendor/<CAPTCHA_V2_SDK>/.
-# Source: the SDK URL .../captcha/sg/<h5>/<sdk>/captcha.js the Affiliate Center loads (also
-# the bdturing conf's extension.setting_version, "<h5>-<sdk>"), and the canary params on the
-# SDK's own /captcha/get and /captcha/verifyV2 requests (read 24 Sep 2026).
-# Update: when setting_version or the CDN path changes, copy the new captcha.js and
-# static/js/*.js into reverse/oec_captcha/vendor/<new>/ (see its README), set CAPTCHA_V2_SDK,
-# and check one solve.
-CAPTCHA_V2_SDK = "3.0.75-1.0.0.956"                    # "<h5_sdk_version>-<sdk_version>"
-CAPTCHA_V2_SDK_CDN = f"{STATIC_CDN}/oec-captcha-ttweb/captcha/sg"
-CAPTCHA_AFFILIATE_HOST = "https://api-verification.tiktokshop.com"
-CAPTCHA_GET_CANARIES = {"capa-data-ss": "1", "nBXfObIT": "s5AVxINL"}
-CAPTCHA_VERIFY_CANARIES = {"xx-tt-dd": "qJI7ttpVdGKKbSBvYqmaf0aPo"}
-CAPTCHA_V2_IMG_W = 340                                 # width the SDK draws the challenge at
-CAPTCHA_V2_DRAG_W = 271                                # slider track width in that layout
-# When the Affiliate Center conf names no challenge_code / refer_path (seen on
-# /affiliate/creator/detail).
-CAPTCHA_AFFILIATE_CHALLENGE_CODE = "3058"
-CAPTCHA_AFFILIATE_REFER_PATH = "/affiliate/creator/detail"
+# The Affiliate Center answers its own bdturing challenges through the 3.x h5 SDK
+# ("oec-captcha-ttweb", encrypted /captcha/verifyV2). tiktok_shop has no solver for it: every
+# such challenge traced so far came from a request we had built wrong (a frozen BSID, a
+# signature the page does not send), and the headless slide solver never once passed. The
+# SDK copies and the oracle live in history (fork commit 1753ee1, reverse/oec_captcha) for
+# when a challenge is shown to the user to solve instead.
 #
-# challenge_code both SDKs send per subtype before a challenge names its own.
+# challenge_code the SDK sends per subtype before a challenge names its own.
 CAPTCHA_CHALLENGE_CODE = {"slide": "99999", "3d": "99997"}
 
 # ============================================================================ chat (IM SDK)

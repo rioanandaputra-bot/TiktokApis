@@ -1,7 +1,7 @@
 {
   "name": "tiktok-shop-js",
   "private": true,
-  "description": "Headless (Node+jsdom, no browser) runners for tiktok_shop: the device-cookie minter and the captcha SDK oracle",
+  "description": "Headless (Node+jsdom, no browser) runner for tiktok_shop's device-cookie minter",
   "dependencies": {
     "jsdom": "^24.1.0"
   }
