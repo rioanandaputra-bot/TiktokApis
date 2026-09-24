@@ -1,7 +1,7 @@
 """Frontier, the IM push websocket: handshake URL, client frames, and decoding push frames
 (protobuf wire format) into clean message dicts.
 
-Grounded in a real captured frame (see tests/test_frontier_decode.py), NOT guessed.
+Grounded in a real captured frame (GrowSeller keeps it as a test fixture), not guessed.
 
 Frame layout (verified):
   WsFrame:  f3=service, f4=method, f5=headers(repeated {f1=key,f2=value}),
@@ -19,10 +19,10 @@ field never breaks decoding — unknown fields are ignored.
 import hashlib
 import time
 import urllib.parse
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .. import constants as tt
-from .protobuf import _ld, _s, _vf
+from .protobuf import _ld, _s, _vf, encode_request
 
 NEW_MESSAGE_CMD = 500
 
@@ -448,3 +448,45 @@ def encode_ws_frame(seq_id: int, payload: bytes) -> bytes:
     b += _s(7, "pb")
     b += _ld(8, payload)
     return bytes(b)
+
+
+# ============================================================================ client commands
+# (cmd, body) pairs the web IM SDK sends on the socket; `frame()` wraps one for sending.
+
+def _cid(conv_short_id: str) -> int:
+    return int(conv_short_id) if str(conv_short_id).isdigit() else 0
+
+
+def frame(token_data: Dict[str, Any], cmd: int, body: bytes, seq: int) -> bytes:
+    """One socket frame carrying command `cmd` for the token's IM device."""
+    device_id = str(token_data.get("user", {}).get("user_id", ""))
+    return encode_ws_frame(seq, encode_request(cmd, body, token_data.get("token", ""), device_id, seq_id=seq))
+
+
+def keepalive() -> Tuple[int, bytes]:
+    """Activates the session's push stream; the SDK repeats it as a keepalive."""
+    return 610, _ld(610, bytes())
+
+
+def read_index_query(conv_short_id: str) -> Tuple[int, bytes]:
+    """Ask for both participants' read indices (answered on the same seq)."""
+    return 2000, _ld(2000, _vf(1, _cid(conv_short_id)) + _vf(2, 2) + _s(3, str(conv_short_id)))
+
+
+def open_conversation(conv_short_id: str) -> List[Tuple[int, bytes]]:
+    """What the SDK sends on opening a conversation: participants (605), state sync (610), then
+    after a read-index query (read_index_query), the participants' min index (2001)."""
+    cid, c = str(conv_short_id), _cid(conv_short_id)
+    return [(605, _ld(605, _s(1, cid) + _vf(2, c) + _vf(3, 2) + _vf(4, 0) + _vf(5, 50))),
+            (610, _ld(610, _ld(1, _s(1, cid) + _vf(2, c) + _vf(3, 2))))]
+
+
+def participants_min_index(conv_short_id: str) -> Tuple[int, bytes]:
+    return 2001, _ld(2001, _vf(1, _cid(conv_short_id)) + _vf(2, 2) + _s(3, str(conv_short_id)))
+
+
+def mark_read(conv_short_id: str, read_index: int = 0) -> Tuple[int, bytes, int]:
+    """(cmd 2002, body 604, the read index sent): mark read up to `read_index` (now, in µs, if 0)."""
+    idx = int(read_index) if read_index else int(time.time() * 1000000)
+    body = _s(1, str(conv_short_id)) + _vf(2, _cid(conv_short_id)) + _vf(3, 2) + _vf(4, idx) + _vf(5, 0) + _vf(6, 0) + _vf(11, 0)
+    return 2002, _ld(604, body), idx

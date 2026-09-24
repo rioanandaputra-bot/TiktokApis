@@ -88,7 +88,7 @@ class Device:
 
 def legacy() -> Device:
     """The identity every shop presented before per-shop devices: Mac, Chrome 131 UA,
-    client hints and TLS (tiktok_shop_constants LEGACY_*), fixed so shops that still
+    client hints and TLS (tiktok_shop.constants LEGACY_*), fixed so shops that still
     present it never move onto another device."""
     return Device(user_agent=tt.LEGACY_USER_AGENT, platform="MacIntel", screen=(1536, 960, 1536, 867),
                   language="en-US", languages=("en-US", "en", "id"), timezone=tt.TIMEZONE,

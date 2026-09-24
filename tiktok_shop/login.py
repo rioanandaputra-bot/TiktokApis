@@ -34,7 +34,7 @@ from .web import browser_urlencode as _browser_urlencode, client_hints as _clien
 
 logger = logging.getLogger("tiktok_shop.login")
 
-# Hosts, app ids, SDK versions and captcha parameters: tiktok_shop_constants (`tt`).
+# Hosts, app ids, SDK versions and captcha parameters: tiktok_shop.constants (`tt`).
 
 
 class ConnectError(Exception):
@@ -270,7 +270,7 @@ def login(sess, email: str, password: str, verify_fp: str, ms_token: str, csrf: 
 # --------------------------------------------------------------------------- captcha (SSE-relayed)
 # The login page answers its bdturing conf through verify-sg with the 2.x SDK: plain JSON, no
 # msToken or X-Bogus/X-Gnarly on these calls. Parameters, their order and the body are the
-# ones Chrome sent on a real sub-account login (24 Sep 2026; tiktok_shop_constants CAPTCHA_LOGIN_*).
+# ones Chrome sent on a real sub-account login (24 Sep 2026; tiktok_shop.constants CAPTCHA_LOGIN_*).
 def _captcha_query(sess, conf: dict) -> dict:
     dev = _dev(sess)
     region = conf.get("region") or "sg"

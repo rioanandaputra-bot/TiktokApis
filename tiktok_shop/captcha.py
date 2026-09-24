@@ -63,7 +63,7 @@ def find_slide_puzzle_position(bg_bytes: bytes, piece_bytes: bytes, tip_y: Optio
 
 def run_oracle(payload: Dict[str, Any], timeout_s: int = 45) -> str:
     """Execute the Node captcha oracle with stdin JSON and return stdout. The SDK build and the
-    page it runs on come from tiktok_shop_constants unless the payload names them."""
+    page it runs on come from tiktok_shop.constants unless the payload names them."""
     payload = {"sdk": tt.CAPTCHA_V2_SDK, "page_url": tt.AFFILIATE_MARKETPLACE_PAGE, **payload}
     proc = subprocess.run(["node", str(ORACLE_JS)], input=json.dumps(payload), capture_output=True,
                           text=True, timeout=timeout_s, cwd=str(ORACLE_JS.parent))
