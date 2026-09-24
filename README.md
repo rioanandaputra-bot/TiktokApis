@@ -101,7 +101,7 @@ python demo.py --publish photos ./1.jpg ./2.jpg --text "我的图集" --title "�
 api/                         TikTok Web API、兼容入口、登录占位
 builder/                     Cookie/浏览器状态、header、query、签名调度
 signing/                     Python 签名、protobuf、WebMssdk 本地运行器
-reverse/tiktok_shop_bsid/env/ Shop BSID 本地 SDK 运行器与必需 bundle
+reverse/tiktok_shop_bsid/env/ Shop / OEC BSID 本地 SDK 运行器、页面 profiles 与必需 bundle
 static/                      IM protobuf 生成代码（仍被收发接口使用）
 utils/                       HTTP 与兼容工具
 demo.py                      私密视频/图集发布示例（默认不发送）
@@ -109,6 +109,24 @@ author/logo.svg              项目 Logo
 ```
 
 `Dockerfile` 包含以上运行时目录，可用 `docker build -t tiktok-apis .` 做环境验证；镜像默认只做导入检查，不会自动登录或执行接口。
+
+## 🔐 OEC Lucifer BSID（页面 profile）
+
+`reverse/tiktok_shop_bsid/env/run.js` 的页面相关参数（URL、unisec 版本、`lucifer.init` 配置、navigator、screen）来自 profile，默认仍是 Shop PDP，行为不变。`profiles/affiliate-id.json` 对应 affiliate-id.tokopedia.com（Affiliate Center），配套 `vendor/affiliate-id/` 下的官方 loader/core 原样副本。说明见 `reverse/tiktok_shop_bsid/env/PROFILES.md`。
+
+```python
+from signing import LuciferBSIDSigner
+
+signer = LuciferBSIDSigner(profile="affiliate-id.json")
+# 同一 Cookie 会话由官方 SDK 自己请求 /bs/rt 获取 bs token（启动一次）。
+token = signer.mint_token(cookie=cookie_without_oec_lucifer, user_agent=ua)
+# 常驻 bsid.js --serve 进程为任意会话签名；URL 须已带 msToken、X-Bogus、X-Gnarly。
+bsid, = signer.sign(cookie=f"{cookie}; oec_lucifer={token}", user_agent=ua,
+                    requests=[("POST", pre_sign_url, body)])
+url = f"{pre_sign_url}&X-Tts-Oec-Bsid={bsid}"
+```
+
+请求需同时携带 `oec_lucifer=<token>` Cookie。更新 unisec 版本时同时替换 vendor 文件与 profile 中的 URL。
 
 ## ⚠️ 范围与限制
 

@@ -8,6 +8,7 @@ from .ticket_guard import (
 from .protobuf import ProtobufWireError, field_bytes, field_message, field_string, field_varint, varint
 from .aws_v4 import canonical_query as canonical_aws_query, sign as sign_aws_v4
 from .shop_bsid import ShopBSIDError, ShopBSIDSigner
+from .lucifer_bsid import LuciferBSIDError, LuciferBSIDSigner
 
 __all__ = [
     "encode_dynosaur_current",
@@ -30,4 +31,6 @@ __all__ = [
     "sign_aws_v4",
     "ShopBSIDError",
     "ShopBSIDSigner",
+    "LuciferBSIDError",
+    "LuciferBSIDSigner",
 ]
