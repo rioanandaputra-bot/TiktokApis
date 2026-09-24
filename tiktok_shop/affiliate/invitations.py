@@ -83,14 +83,21 @@ def call(api: ShopApi, path: str, body: Optional[Dict[str, Any]] = None, method:
     return ok_data(raw, path).get("data") or {}
 
 
-def _search_params() -> Dict[str, Any]:
-    return {"query_items": [], "filter_accept_status": 3, "search_group_type": list(SEARCH_GROUP_TYPES)}
+# The list page's "Search by invitation name" box sends its text as query item type 4
+# (live page 24 Sep 2026); TikTok matches on part of the name.
+QUERY_NAME = 4
 
 
-def search(api: ShopApi, status_code: int, page: int) -> Dict[str, Any]:
-    """One page (PAGE_SIZE) of invitations in one status: {invitation_list, ...}."""
+def _search_params(name: str = "") -> Dict[str, Any]:
+    items = [{"type": QUERY_NAME, "key": name}] if name.strip() else []
+    return {"query_items": items, "filter_accept_status": 3, "search_group_type": list(SEARCH_GROUP_TYPES)}
+
+
+def search(api: ShopApi, status_code: int, page: int, name: str = "") -> Dict[str, Any]:
+    """One page (PAGE_SIZE) of invitations in one status, optionally only those whose name
+    contains `name`: {invitation_list, total, has_more}."""
     return call(api, "/oec/affiliate/seller/invitation_group/search", {
-        "search_params": _search_params(), "invitation_group_status": status_code,
+        "search_params": _search_params(name), "invitation_group_status": status_code,
         "page_size": PAGE_SIZE, "cur_page": page})
 
 
@@ -99,10 +106,10 @@ def items(page: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [it for it in (page.get("invitation_list") or []) if it.get("id")]
 
 
-def counts(api: ShopApi) -> Dict[int, int]:
-    """TikTok's own per-status totals {status_code: count}."""
+def counts(api: ShopApi, name: str = "") -> Dict[int, int]:
+    """TikTok's own per-status totals {status_code: count}, optionally for a name search."""
     data = call(api, "/oec/affiliate/seller/invitation_group/count", {
-        "search_params": _search_params(), "invitation_status": [c for _, _, c in STATUSES]})
+        "search_params": _search_params(name), "invitation_status": [c for _, _, c in STATUSES]})
     rows = data if isinstance(data, list) else (data.get("data") or [])
     return {int(r["invitation_group_status"]): int(r.get("count") or 0)
             for r in rows if isinstance(r, dict) and "invitation_group_status" in r}
