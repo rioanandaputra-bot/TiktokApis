@@ -138,7 +138,9 @@ url = f"{pre_sign_url}&X-Tts-Oec-Bsid={bsid}"
 | `device.py` | 会话设备（UA、TLS 目标、client hints、navigator）及其构造方式 |
 | `signing.py` | 基于上游 `signing/pure.py` 的 X-Bogus / X-Gnarly（同一时钟） |
 | `web.py` | 浏览器风格的 query 编码与 client hints |
-| `cookies.py` | Netscape cookie 格式 |
+| `cookies.py` | Netscape cookie 格式；按名取值、从 cookie/JWT 读取 seller id 与 region |
+| `bsid.py` | X-Tts-Oec-Bsid 与 bs token（经 `signing/lucifer_bsid.py`，token 可放入共享存储） |
+| `client.py` | 通用 query、请求头、X-Bogus/X-Gnarly 签名 URL、响应解码、bdturing 识别，以及多会话请求客户端（401/403、验证码、ttwid/设备重铸等恢复流程，由宿主应用通过 `Host` 提供存储与动作） |
 | `login.py` | 子账号邀请激活、登录、验证码（verify-sg）、OTP、会话导出 |
 | `captcha.py` | Affiliate Center 滑块验证码（SDK 3.x，经 `js/captcha_oracle.js` 加解密） |
 | `device_mint.py` | 无浏览器生成设备 cookie（`js/mint_svwebid.js`） |

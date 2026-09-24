@@ -2,8 +2,15 @@
 
 Parsed form: {(domain, name): {domain, path, secure, expires, value}}.
 """
+import base64
 import http.cookiejar
-from typing import Any, Dict, Tuple
+import json
+from typing import Any, Dict, Iterable, Optional, Tuple
+
+from . import constants as tt
+
+# A session's cookies as (name, value, domain, path) -- what callers hand to this package.
+Cookie = Tuple[str, str, str, str]
 
 
 def parse_netscape(cookies_content: str) -> Dict[Tuple[str, str], Dict[str, Any]]:
@@ -62,3 +69,66 @@ def load_jar(cookies_content: str) -> http.cookiejar.CookieJar:
             )
             cj.set_cookie(c)
     return cj
+
+
+def cookie_value(cookies: Iterable[Cookie], name: str) -> Optional[str]:
+    """The cookie's value, preferring the Affiliate Center host's own when names repeat."""
+    exact = fallback = None
+    for n, value, domain, _ in cookies:
+        if n != name or not value:
+            continue
+        if (domain or "").lstrip(".") == tt.AFFILIATE_DOMAIN:
+            exact = value
+        elif fallback is None:
+            fallback = value
+    return exact or fallback
+
+
+def _jwt_claims(token: Optional[str]) -> Dict[str, Any]:
+    try:
+        payload = token.split(".")[1]
+        return json.loads(base64.b64decode(payload + "=" * (-len(payload) % 4)).decode())
+    except Exception:
+        return {}
+
+
+def seller_id(cookies: Iterable[Cookie]) -> Optional[str]:
+    """oec_seller_id from the seller-center cookies, else from its seller JWTs."""
+    cookies = list(cookies)
+    for name in ("oec_seller_id_unified_seller_env", "global_seller_id_unified_seller_env",
+                 "oec_seller_id", "seller_id"):
+        value = cookie_value(cookies, name)
+        if value:
+            return str(value)
+    for name in ("UNIFIED_SELLER_TOKEN", "SELLER_TOKEN"):
+        claims = _jwt_claims(cookie_value(cookies, name))
+        found = claims.get("SellerId") or claims.get("OecShopId") or claims.get("OecSellerId") \
+            or claims.get("GlobalSellerId")
+        if found:
+            return str(found)
+        sellers_map = claims.get("GlobalSellerMap")
+        if isinstance(sellers_map, dict):
+            for key, value in sellers_map.items():
+                if key:
+                    return str(key)
+                for seller in (value or {}).get("Sellers") or [] if isinstance(value, dict) else []:
+                    if isinstance(seller, dict) and seller.get("SellerID"):
+                        return str(seller["SellerID"])
+    return None
+
+
+def region(cookies: Iterable[Cookie]) -> Optional[str]:
+    """The shop's region from its seller JWTs, if they name one."""
+    cookies = list(cookies)
+    for name in ("UNIFIED_SELLER_TOKEN", "SELLER_TOKEN"):
+        claims = _jwt_claims(cookie_value(cookies, name))
+        found = claims.get("ShopRegion") or claims.get("region")
+        if found and str(found).strip():
+            return str(found).upper()
+        sellers_map = claims.get("GlobalSellerMap")
+        if isinstance(sellers_map, dict):
+            for value in sellers_map.values():
+                for seller in (value.get("Sellers") or []) if isinstance(value, dict) else []:
+                    if isinstance(seller, dict) and seller.get("ShopRegion"):
+                        return str(seller["ShopRegion"]).upper()
+    return None
