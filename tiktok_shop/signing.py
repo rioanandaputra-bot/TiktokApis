@@ -39,7 +39,3 @@ def x_gnarly(query: str, body: str, device: Device) -> str:
                                       canvas=device.canvas, timestamp=ts_ms // 1000,
                                       timestamp_ms=nonce if nonce is not None else ts_ms)
 
-
-def sign_query(query: str, body: str, device: Device) -> str:
-    """`query` with X-Bogus and X-Gnarly appended, in the page's order."""
-    return f"{query}&X-Bogus={x_bogus(query, body, device)}&X-Gnarly={x_gnarly(query, body, device)}"

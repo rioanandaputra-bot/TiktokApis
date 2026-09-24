@@ -197,7 +197,7 @@ def open_collaboration_products(api: ShopApi, page: int = 1, page_size: int = 10
     seller_id = str(api.seller_id or "")
     query = str(query or "").strip()
     if query:
-        # search_key 1 = name, 2 = product id (listProductOpenCollab.har)
+        # search_key 1 = name, 2 = product id (the Open Collaboration page's search)
         if search_key in (2, "2") or (not search_key and (not query.isdigit() or len(query) < 10)):
             params = [{"search_key": 1, "search_value": query}, {"search_key": 10, "search_value": "", "status": 1}]
         else:

@@ -129,7 +129,7 @@ def encode_send_product_message(
     region: str = tt.REGION,
     user_language: str = "en",
 ) -> Tuple[bytes, str]:
-    """Encode send product card message Protobuf payload matching TikTok IM HAR Entry 188."""
+    """A product-card message body, as the seller/im page sends one."""
     import json as _json
     if token is None:
         token = {}

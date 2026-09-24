@@ -1,7 +1,7 @@
 """
 TikTok seller sub-account login/activation as importable, I/O-decoupled functions.
 
-Extracted from the proven PoC docs/tiktok/unofficial/login/login_test.py (verified live).
+Verified live end to end (activation, login, captcha, OTP) on 24 Sep 2026.
 No print()/input() here — callers (arq worker, routes) own the I/O and the SSE captcha relay:
 captcha image bytes are RETURNED, click coords are PASSED IN. Every function operates on a
 curl_cffi Session passed by the caller, so the same jar can be serialized into Redis between
@@ -9,7 +9,7 @@ webhook round-trips (activation email → login → OTP email may span minutes).
 
 Codec for account/password/otp/extra = XOR 0x05 then hex (verified byte-for-byte vs HAR).
 
-Flow (see PLAN-email-binding.md §1):
+Flow:
   bootstrap() -> set_password() [activation]      # host business-sso / seller-id
              -> login() -> ('captcha'|'otp'|'ok')
              -> fetch_captcha()/submit_captcha()  # host verify-sg.byteoversea.com
@@ -221,7 +221,7 @@ def set_password(sess, invite_ticket: str, subject_aid: str, password: str,
     """Accept a member invitation and set the account password (activation email flow).
 
     invitation/check|accept live on the seller center (tt.SELLER), signed X-Bogus/X-Gnarly,
-    referer = the activate-page. Verified via live test. See PLAN-email-binding.md §1a.
+    referer = the activate-page. Verified via live test.
     """
     extra_q = {"subject_aid": str(subject_aid), "account_sdk_source": "web",
                "sdk_version": tt.PASSPORT_SDK_ACTIVATE}

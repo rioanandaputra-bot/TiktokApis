@@ -3,7 +3,7 @@
 Everything a client needs to look like TikTok's own web pages -- hosts, app ids, SDK and build
 versions, signing modes, salts, the page profiles the in-process SDK runners boot -- lives
 here, for this fork's own additions (signing/lucifer_bsid.py, reverse/tiktok_shop_bsid,
-reverse/oec_captcha, tiktok_shop) and for every consumer of the fork (GrowSeller imports
+tiktok_shop) and for every consumer of the fork (GrowSeller imports
 `tiktok_shop`). Nothing TikTok-specific is read from environment variables:
 change a value here, commit, and move the submodule pin.
 
@@ -56,7 +56,6 @@ SELLER_DOMAIN = "seller-id.tokopedia.com"
 SSO_DOMAIN = "business-sso-id.tokopedia.com"
 
 # Pages GrowSeller presents as referer / boots SDKs on.
-SELLER_HOME = f"{SELLER}/homepage"
 SELLER_LOGIN_PAGE = f"{SELLER}/account/login"
 SELLER_ACTIVATE_PAGE = f"{SELLER}/profile/activate-page"
 AFFILIATE_IM_PAGE = f"{AFFILIATE}/seller/im"
@@ -86,8 +85,7 @@ MCS_APP_KEY = "566f58151b0ed37e"
 # `sdk_version:"` next to `account_sdk_source`.
 PASSPORT_SDK_ACTIVATE = "2.1.3-tiktokbeta.1"
 PASSPORT_SDK_LOGIN = "2.1.3-tiktokbeta.2"
-# Login form `ect_type` (account_login/v3 on the login page; from the login HAR in
-# docs/tiktok/unofficial/login, accepted 24 Sep 2026).
+# Login form `ect_type` (account_login/v3 on the login page; accepted 24 Sep 2026).
 LOGIN_ECT_TYPE = "13"
 
 # ============================================================================ signing
