@@ -132,3 +132,16 @@ def region(cookies: Iterable[Cookie]) -> Optional[str]:
                     if isinstance(seller, dict) and seller.get("ShopRegion"):
                         return str(seller["ShopRegion"]).upper()
     return None
+
+
+def cffi_jar(parsed: Dict[Tuple[str, str], Dict[str, Any]]):
+    """A parse_netscape() dict as a curl_cffi cookie jar."""
+    from curl_cffi import requests as cffi_requests
+    jar = cffi_requests.cookies.Cookies()
+    for (domain, name), m in parsed.items():
+        if m.get("value"):
+            try:
+                jar.set(name, m["value"], domain=domain, path=m.get("path", "/"))
+            except Exception:
+                pass
+    return jar

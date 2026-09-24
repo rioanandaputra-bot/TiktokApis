@@ -145,6 +145,9 @@ url = f"{pre_sign_url}&X-Tts-Oec-Bsid={bsid}"
 | `captcha.py` | Affiliate Center 滑块验证码（SDK 3.x，经 `js/captcha_oracle.js` 加解密） |
 | `device_mint.py` | 无浏览器生成设备 cookie（`js/mint_svwebid.js`） |
 | `im/protobuf.py`, `im/frontier.py` | IM 请求/消息编码、Frontier 握手与推送解码 |
+| `im/rest.py` | IM 主机上的会话列表、消息、发送（文本/图片/商品卡）、已读、搜索、创建会话 |
+| `account.py` | 会话维护：账号校验（多信号）、SSO 重定向链刷新、ttwid / s_v_web_id 设备 cookie |
+| `affiliate/` | Affiliate Center 接口（`ShopApi` 由宿主应用提供）：`invitations`（定向邀约与选品）、`samples`（样品申请）、`analytics`（Performa 明细与导出）、`creators`（handle 解析与达人画像）、`chat`（IM token、联系方式、邀约/商品卡片、达人资料、图片上传） |
 
 使用：把仓库根目录加入 `sys.path` 后 `import tiktok_shop`；Python 依赖见 `tiktok_shop/requirements.txt`，Node 依赖在 `tiktok_shop/js/` 执行 `npm ci`（或以 `NODE_PATH` 指向已安装的 `node_modules`）。
 
