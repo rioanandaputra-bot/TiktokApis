@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 import os
 from pathlib import Path
+import queue
 import re
-import select
 import shutil
 import subprocess
 import threading
@@ -15,6 +15,10 @@ from typing import Iterable, Mapping
 
 class LuciferBSIDError(RuntimeError):
     """The local OEC SDK could not produce a BSID or a bs token."""
+
+
+class _RunnerRejected(Exception):
+    """The runner answered, but refused this request (bad input, not a dead process)."""
 
 
 class LuciferBSIDSigner:
@@ -45,6 +49,7 @@ class LuciferBSIDSigner:
         self.sign_timeout = int(sign_timeout)
         self._lock = threading.Lock()
         self._process: subprocess.Popen | None = None
+        self._lines: queue.Queue | None = None
         self._sequence = 0
 
     def _check(self) -> None:
@@ -106,25 +111,40 @@ class LuciferBSIDSigner:
         return token
 
     def _start(self) -> None:
-        self._process = subprocess.Popen(
+        process = subprocess.Popen(
             [self.node, str(self.script), "--serve"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, encoding="utf-8", bufsize=1, cwd=str(self.script.parent),
             env=self._environment(),
             creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
         )
+        # A reader thread instead of select(): Windows cannot select() on a pipe.
+        lines: queue.Queue = queue.Queue()
+
+        def pump(stream, sink) -> None:
+            for line in stream:
+                sink.put(line)
+            sink.put(None)  # EOF: the runner exited
+
+        threading.Thread(target=pump, args=(process.stdout, lines), daemon=True,
+                         name="lucifer-bsid-reader").start()
+        self._process, self._lines = process, lines
         if not self._read(self.timeout).get("ready"):
             self.close()
             raise LuciferBSIDError("Lucifer BSID 常驻进程未就绪")
 
     def _read(self, timeout: int) -> dict:
-        assert self._process is not None and self._process.stdout is not None
-        if not select.select([self._process.stdout], [], [], timeout)[0]:
-            raise TimeoutError("Lucifer BSID 常驻进程无响应")
-        line = self._process.stdout.readline()
-        if not line:
+        assert self._lines is not None
+        try:
+            line = self._lines.get(timeout=timeout)
+        except queue.Empty as exc:
+            raise TimeoutError("Lucifer BSID 常驻进程无响应") from exc
+        if line is None:
             raise LuciferBSIDError("Lucifer BSID 常驻进程已退出")
-        return json.loads(line)
+        try:
+            return json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise LuciferBSIDError("Lucifer BSID 常驻进程返回了非 JSON 数据") from exc
 
     def sign(self, *, cookie: str, user_agent: str = "",
              requests: Iterable[Mapping[str, str] | tuple[str, str, str]]) -> list[str]:
@@ -153,11 +173,11 @@ class LuciferBSIDSigner:
                     if result.get("id") != self._sequence:
                         raise LuciferBSIDError("Lucifer BSID 常驻进程响应顺序错误")
                     if "error" in result:
-                        raise ValueError(str(result["error"]))
+                        raise _RunnerRejected(str(result["error"]))
                     break
-                except ValueError as exc:
+                except _RunnerRejected as exc:
                     raise LuciferBSIDError(f"Lucifer BSID 计算失败：{exc}") from exc
-                except (OSError, TimeoutError, LuciferBSIDError, json.JSONDecodeError):
+                except (OSError, TimeoutError, LuciferBSIDError):
                     # A dead or stalled runner is restarted once; state lives in the cookie.
                     self.close()
                     if attempt == 2:
@@ -173,7 +193,7 @@ class LuciferBSIDSigner:
                 self._process.kill()
             except OSError:
                 pass
-        self._process = None
+        self._process, self._lines = None, None
 
 
 __all__ = ["LuciferBSIDError", "LuciferBSIDSigner"]
