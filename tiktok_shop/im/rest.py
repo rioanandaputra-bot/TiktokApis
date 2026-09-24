@@ -1,14 +1,16 @@
 """TikTok Shop chat REST, on the IM host (IM_API) as the seller/im page calls it.
 
-/v1/* calls carry protobuf request envelopes (tiktok_shop.im.protobuf) and go unsigned, like the
-page's; /api/* calls are JSON and signed (X-Bogus, X-Gnarly, BSID) -- ShopApi.send and
-ShopApi.signed. The answers are JSON (the server picks JSON unless asked for protobuf), trimmed
+/v1/* calls carry protobuf request envelopes (tiktok_shop.im.protobuf); /api/* calls are JSON. Both
+go unsigned (ShopApi.send): the page signs its /api/* calls, but ours signed with X-Bogus, X-Gnarly
+and a BSID are refused with code 10000 plus a captcha, while the same call unsigned answers code 0
+(conversation/create and search_conversation_by_users, verified live 24 Sep 2026). The answers are JSON (the server picks JSON unless asked for protobuf), trimmed
 here to what a chat UI shows. Every call needs the shop's IM token (affiliate.chat.im_token).
 """
 import base64
 import json
 import logging
 import time
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Dict, Optional
 
@@ -282,16 +284,15 @@ class ImError(RuntimeError):
 
 
 def create_conversation(api: ShopApi, token_data: Dict[str, Any], creator_oec_id: str, seller_id: str) -> str:
-    """Open (or find) the conversation between the shop and a creator; its conversation_short_id.
-    Signed like every /api/* call the IM page makes (X-Bogus, X-Gnarly, BSID, msToken -- checked on
-    the live page 25 Sep 2026); only the protobuf /v1/* calls go unsigned."""
+    """Open (or find) the conversation between the shop and a creator; its conversation_short_id."""
     body = {"participants": [
         {"role": 0, "uid": str(creator_oec_id), "extra": {"sender_im_role": "4"}},
         {"role": 1, "uid": str(seller_id), "extra": {"sender_im_role": "2"}},
     ]}
     q = {**api.common_query(), "biz_source": "shop_creator_shop", "oec_seller_id": str(seller_id)}
-    res = decode_body(api.signed("POST", f"{tt.IM_API}/api/v1/im/conversation/create", q, body,
-                                 json_headers(token_data.get("token", ""))))
+    url = f"{tt.IM_API}/api/v1/im/conversation/create?{urllib.parse.urlencode(q)}"
+    res = decode_body(api.send("POST", url, json.dumps(body, separators=(",", ":")),
+                               json_headers(token_data.get("token", ""))))
     if not isinstance(res, dict):
         raise ImError("Invalid response from TikTok IM conversation create")
     if res.get("code") != 0 and res.get("code") is not None:
@@ -444,8 +445,8 @@ def search(api: ShopApi, token_data: Dict[str, Any], query: str, page: int = 1, 
     headers = json_headers(token)
 
     try:
-        raw = api.signed("POST", f"{tt.IM_API}/api/v1/im/search/search_conversation_by_users",
-                         common_query, body_dict, headers)
+        url = f"{tt.IM_API}/api/v1/im/search/search_conversation_by_users?{urllib.parse.urlencode(common_query)}"
+        raw = api.send("POST", url, json.dumps(body_dict, separators=(",", ":")), headers)
         resp = json.loads(raw.decode())
         if resp.get("code") != 0:
             return {"results": [], "total": 0, "has_more": False, "error": resp.get("message")}
