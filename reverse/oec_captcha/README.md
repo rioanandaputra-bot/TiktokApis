@@ -17,4 +17,5 @@ CDN base: `https://sf16-website-login.neutral.ttwstatic.com/obj/tiktok_web_login
 | 3.0.75-1.0.0.956 | 24ce4a0b128f3843f14864f27aeb1000 | loaded by affiliate-id.tokopedia.com, 24 Sep 2026 |
 
 When TikTok ships a new version (its `setting_version` in the bdturing decision conf), add a
-new directory from the CDN rather than editing an existing one.
+new directory from the CDN rather than editing an existing one, then point
+`CAPTCHA_V2_SDK` in `tiktok_shop_constants.py` at it.

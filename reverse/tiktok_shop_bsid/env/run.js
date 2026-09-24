@@ -27,8 +27,9 @@ const https = require("https");
 const NativeBuffer = require("buffer").Buffer;
 
 // Everything page-specific comes from a profile. The defaults are the TikTok Shop PDP
-// this runner was written for; TIKTOK_BSID_PROFILE=<file.json> (absolute, or relative to
-// ./profiles) swaps in another OEC page, e.g. profiles/affiliate-id.json.
+// this runner was written for; TIKTOK_BSID_PROFILE swaps in another OEC page: the profile
+// as inline JSON (what signing/lucifer_bsid.py passes, from tiktok_shop_constants.py
+// BSID_PROFILES), or a JSON file (absolute, or relative to ./profiles).
 const DEFAULT_PROFILE = {
     page_url: "https://shop.tiktok.com/jp/pdp/ruzofo-2-4-ko-setto-silicone-hallux-valgus-correction-tool/1734259790973994282",
     loader_url: "https://sf16-website-login.neutral.ttwstatic.com/obj/tiktok_web_login_static/oec/unisec/web/loader/1.0.0.52/sg/index.js",
@@ -53,8 +54,9 @@ const DEFAULT_PROFILE = {
 function loadProfile() {
     const name = nativeProcess.env.TIKTOK_BSID_PROFILE;
     if (!name) return DEFAULT_PROFILE;
-    const file = path.isAbsolute(name) ? name : path.join(__dirname, "profiles", name);
-    const custom = JSON.parse(fs.readFileSync(file, "utf8"));
+    const inline = name.trim().startsWith("{");
+    const file = inline ? "" : path.isAbsolute(name) ? name : path.join(__dirname, "profiles", name);
+    const custom = JSON.parse(inline ? name : fs.readFileSync(file, "utf8"));
     const merged = { ...DEFAULT_PROFILE, ...custom };
     for (const key of ["lucifer", "navigator", "screen"]) merged[key] = { ...DEFAULT_PROFILE[key], ...(custom[key] || {}) };
     if (nativeProcess.env.TIKTOK_BSID_UA) merged.navigator.userAgent = nativeProcess.env.TIKTOK_BSID_UA;

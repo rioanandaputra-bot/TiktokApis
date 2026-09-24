@@ -13,6 +13,17 @@ import threading
 from typing import Iterable, Mapping
 
 
+def _profiles() -> dict:
+    """BSID_PROFILES from tiktok_shop_constants.py (loaded by path: this module is also
+    loaded by path, outside the package)."""
+    import importlib.util
+    path = Path(__file__).resolve().parents[1] / "tiktok_shop_constants.py"
+    spec = importlib.util.spec_from_file_location("tiktokapis_shop_constants", path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.BSID_PROFILES
+
+
 class LuciferBSIDError(RuntimeError):
     """The local OEC SDK could not produce a BSID or a bs token."""
 
@@ -24,7 +35,8 @@ class _RunnerRejected(Exception):
 class LuciferBSIDSigner:
     """Run the immutable official unisec loader/core through ``bsid.js``.
 
-    The page comes from a profile (``reverse/tiktok_shop_bsid/env/profiles``).
+    The page comes from a profile: a name in ``tiktok_shop_constants.BSID_PROFILES``
+    (passed to the runner inline), or a JSON file for ``run.js``.
     ``mint_token`` boots the SDK once for a cookie session and lets it fetch
     its own bs token from ``/bs/rt``.  ``sign`` keeps one ``bsid.js --serve``
     process alive and signs for any session whose cookie carries that token:
@@ -35,11 +47,12 @@ class LuciferBSIDSigner:
     _TOKEN = re.compile(r"[0-9a-fA-F]{160,}")
     _OEC_COOKIE = re.compile(r"(?:^|;\s*)oec_lucifer=([^;]+)")
 
-    def __init__(self, *, profile: str = "affiliate-id.json",
+    def __init__(self, *, profile: str = "affiliate-id",
                  node: str | None = None,
                  script: str | os.PathLike[str] | None = None,
                  timeout: int = 30, sign_timeout: int = 10):
-        self.profile = str(profile)
+        profiles = _profiles()
+        self.profile = json.dumps(profiles[profile]) if profile in profiles else str(profile)
         self.node = node or shutil.which("node") or ""
         self.script = Path(script) if script else (
             Path(__file__).resolve().parents[1]

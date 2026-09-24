@@ -112,12 +112,12 @@ author/logo.svg              项目 Logo
 
 ## 🔐 OEC Lucifer BSID（页面 profile）
 
-`reverse/tiktok_shop_bsid/env/run.js` 的页面相关参数（URL、unisec 版本、`lucifer.init` 配置、navigator、screen）来自 profile，默认仍是 Shop PDP，行为不变。`profiles/affiliate-id.json` 对应 affiliate-id.tokopedia.com（Affiliate Center），配套 `vendor/affiliate-id/` 下的官方 loader/core 原样副本。说明见 `reverse/tiktok_shop_bsid/env/PROFILES.md`。
+`reverse/tiktok_shop_bsid/env/run.js` 的页面相关参数（URL、unisec 版本、`lucifer.init` 配置、navigator、screen）来自 profile，默认仍是 Shop PDP，行为不变。`tiktok_shop_constants.py` 中的 `BSID_PROFILES["affiliate-id"]` 对应 affiliate-id.tokopedia.com（Affiliate Center），配套 `vendor/affiliate-id/` 下的官方 loader/core 原样副本。说明见 `reverse/tiktok_shop_bsid/env/PROFILES.md`。
 
 ```python
 from signing import LuciferBSIDSigner
 
-signer = LuciferBSIDSigner(profile="affiliate-id.json")
+signer = LuciferBSIDSigner(profile="affiliate-id")
 # 同一 Cookie 会话由官方 SDK 自己请求 /bs/rt 获取 bs token（启动一次）。
 token = signer.mint_token(cookie=cookie_without_oec_lucifer, user_agent=ua)
 # 常驻 bsid.js --serve 进程为任意会话签名；URL 须已带 msToken、X-Bogus、X-Gnarly。
@@ -126,7 +126,11 @@ bsid, = signer.sign(cookie=f"{cookie}; oec_lucifer={token}", user_agent=ua,
 url = f"{pre_sign_url}&X-Tts-Oec-Bsid={bsid}"
 ```
 
-请求需同时携带 `oec_lucifer=<token>` Cookie。更新 unisec 版本时同时替换 vendor 文件与 profile 中的 URL。
+请求需同时携带 `oec_lucifer=<token>` Cookie。更新 unisec 版本时同时替换 vendor 文件与 `tiktok_shop_constants.py` 中 profile 的 URL。
+
+## 📌 TikTok Shop 常量（tiktok_shop_constants.py）
+
+TikTok Shop（Tokopedia 印尼站）用到的所有取值——域名、aid、SDK/构建版本、签名模式、盐值、SDK 运行器的页面 profile——统一定义在 `tiktok_shop_constants.py`，本仓库新增部分与下游（GrowSeller）都从这里读取，不再使用环境变量。每组取值都注明来源页面、最近核实日期以及重新获取与更新的步骤。上游（cv-cat）自带的算法内部常量不迁移，以保持合并上游时无冲突。
 
 ## ⚠️ 范围与限制
 
