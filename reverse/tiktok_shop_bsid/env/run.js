@@ -23,17 +23,55 @@ const NativeTextEncoder = global.TextEncoder;
 const nativeCrypto = global.crypto;
 const nativeAtob = global.atob;
 
-const PAGE_URL = "https://shop.tiktok.com/jp/pdp/ruzofo-2-4-ko-setto-silicone-hallux-valgus-correction-tool/1734259790973994282";
-const LOADER_URL = "https://sf16-website-login.neutral.ttwstatic.com/obj/tiktok_web_login_static/oec/unisec/web/loader/1.0.0.52/sg/index.js";
-const CORE_URL = "https://sf16-website-login.neutral.ttwstatic.com/obj/tiktok_web_login_static/oec/unisec/web/1.0.0.65/sg/index.js";
+const https = require("https");
+const NativeBuffer = require("buffer").Buffer;
+
+// Everything page-specific comes from a profile. The defaults are the TikTok Shop PDP
+// this runner was written for; TIKTOK_BSID_PROFILE=<file.json> (absolute, or relative to
+// ./profiles) swaps in another OEC page, e.g. profiles/affiliate-id.json.
+const DEFAULT_PROFILE = {
+    page_url: "https://shop.tiktok.com/jp/pdp/ruzofo-2-4-ko-setto-silicone-hallux-valgus-correction-tool/1734259790973994282",
+    loader_url: "https://sf16-website-login.neutral.ttwstatic.com/obj/tiktok_web_login_static/oec/unisec/web/loader/1.0.0.52/sg/index.js",
+    core_url: "https://sf16-website-login.neutral.ttwstatic.com/obj/tiktok_web_login_static/oec/unisec/web/1.0.0.65/sg/index.js",
+    loader_file: "loader.js",
+    core_file: "core.js",
+    webmssdk: true,
+    rt_passthrough: false,
+    aid: 1988,
+    lucifer: {
+        region: "sg", mode: 516,
+        initialPathList: ["^/captcha/get", "^/captcha/verifyV2", "^/captcha/feedbackV2", "^/.*"],
+    },
+    navigator: {
+        userAgent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+        platform: "Win32", language: "zh-CN", languages: ["zh-CN", "zh", "en", "zh-TW", "ja"],
+        hardwareConcurrency: 20, deviceMemory: 32, maxTouchPoints: 10,
+    },
+    screen: { width: 2560, height: 1440, availWidth: 2560, availHeight: 1392 },
+};
+
+function loadProfile() {
+    const name = nativeProcess.env.TIKTOK_BSID_PROFILE;
+    if (!name) return DEFAULT_PROFILE;
+    const file = path.isAbsolute(name) ? name : path.join(__dirname, "profiles", name);
+    const custom = JSON.parse(fs.readFileSync(file, "utf8"));
+    const merged = { ...DEFAULT_PROFILE, ...custom };
+    for (const key of ["lucifer", "navigator", "screen"]) merged[key] = { ...DEFAULT_PROFILE[key], ...(custom[key] || {}) };
+    if (nativeProcess.env.TIKTOK_BSID_UA) merged.navigator.userAgent = nativeProcess.env.TIKTOK_BSID_UA;
+    return merged;
+}
+const PROFILE = loadProfile();
+const PAGE_URL = PROFILE.page_url;
+const LOADER_URL = PROFILE.loader_url;
+const CORE_URL = PROFILE.core_url;
 const WEBMSSDK_URL = "https://sf16-website-login.neutral.ttwstatic.com/obj/tiktok_web_login_static/webmssdk/1.0.0.162/webmssdk.js";
 const WEBMSSDK_EX_URL = "https://sf16-website-login.neutral.ttwstatic.com/obj/tiktok_web_login_static/ttweb_webmssdk_ex/1.0.0.2875/webmssdk_ex.js";
 
 const code = {
-    loader: fs.readFileSync(path.join(__dirname, "loader.js"), "utf8"),
-    core: fs.readFileSync(path.join(__dirname, "core.js"), "utf8"),
-    webmssdk: fs.readFileSync(path.join(__dirname, "webmssdk.js"), "utf8"),
-    webmssdkEx: fs.readFileSync(path.join(__dirname, "webmssdk_ex.js"), "utf8"),
+    loader: fs.readFileSync(path.join(__dirname, PROFILE.loader_file), "utf8"),
+    core: fs.readFileSync(path.join(__dirname, PROFILE.core_file), "utf8"),
+    webmssdk: PROFILE.webmssdk ? fs.readFileSync(path.join(__dirname, "webmssdk.js"), "utf8") : "",
+    webmssdkEx: PROFILE.webmssdk ? fs.readFileSync(path.join(__dirname, "webmssdk_ex.js"), "utf8") : "",
 };
 
 function makeEventTarget(target) {
@@ -307,7 +345,7 @@ function serializeCookies() {
 function currentBsToken() {
     const entry = cookiePairs.find(([name]) => name === "oec_lucifer");
     if (!entry || !entry[1]) return undefined;
-    return /^[0-9a-f]{160}$/i.test(entry[1]) ? entry[1] : undefined;
+    return /^[0-9a-f]{160,}$/i.test(entry[1]) ? entry[1] : undefined;
 }
 
 function seedSecurityStorage() {
@@ -378,7 +416,7 @@ Object.defineProperties(fakeDocument, {
         },
         enumerable: true,
     },
-    domain: { get() { return "shop.tiktok.com"; }, enumerable: true },
+    domain: { get() { return new URL(PAGE_URL).hostname; }, enumerable: true },
     URL: { get() { return PAGE_URL; }, enumerable: true },
     documentURI: { get() { return PAGE_URL; }, enumerable: true },
     referrer: { get() { return ""; }, enumerable: true },
@@ -460,18 +498,18 @@ fakeMimeTypes.namedItem = env.setFuncNative(function namedItem(type) {
 env.setObjNative(fakeMimeTypes, "MimeTypeArray");
 
 Object.defineProperties(fakeNavigator, {
-    userAgent: { get() { return "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36"; }, enumerable: true },
-    platform: { get() { return "Win32"; }, enumerable: true },
-    language: { get() { return "zh-CN"; }, enumerable: true },
-    languages: { get() { return ["zh-CN", "zh", "en", "zh-TW", "ja"]; }, enumerable: true },
+    userAgent: { get() { return PROFILE.navigator.userAgent; }, enumerable: true },
+    platform: { get() { return PROFILE.navigator.platform; }, enumerable: true },
+    language: { get() { return PROFILE.navigator.language; }, enumerable: true },
+    languages: { get() { return PROFILE.navigator.languages; }, enumerable: true },
     cookieEnabled: { get() { return true; }, enumerable: true },
     appName: { get() { return "Netscape"; }, enumerable: true },
     vendor: { get() { return "Google Inc."; }, enumerable: true },
     onLine: { get() { return true; }, enumerable: true },
-    hardwareConcurrency: { get() { return 20; }, enumerable: true },
+    hardwareConcurrency: { get() { return PROFILE.navigator.hardwareConcurrency; }, enumerable: true },
     webdriver: { get() { return false; }, enumerable: true },
-    maxTouchPoints: { get() { return 10; }, enumerable: true },
-    deviceMemory: { get() { return 32; }, enumerable: true },
+    maxTouchPoints: { get() { return PROFILE.navigator.maxTouchPoints; }, enumerable: true },
+    deviceMemory: { get() { return PROFILE.navigator.deviceMemory; }, enumerable: true },
     productSub: { get() { return "20030107"; }, enumerable: true },
     plugins: { get() { return fakePlugins; }, enumerable: true },
     mimeTypes: { get() { return fakeMimeTypes; }, enumerable: true },
@@ -492,8 +530,8 @@ Object.defineProperties(fakeNavigator, {
 fakeNavigator.sendBeacon = env.setFuncNative(function sendBeacon() { return true; }, "sendBeacon", 2);
 
 Object.defineProperties(fakeScreen, {
-    width: { get() { return 2560; } }, height: { get() { return 1440; } },
-    availWidth: { get() { return 2560; } }, availHeight: { get() { return 1392; } },
+    width: { get() { return PROFILE.screen.width; } }, height: { get() { return PROFILE.screen.height; } },
+    availWidth: { get() { return PROFILE.screen.availWidth; } }, availHeight: { get() { return PROFILE.screen.availHeight; } },
     colorDepth: { get() { return 24; } }, pixelDepth: { get() { return 24; } },
 });
 
@@ -530,7 +568,7 @@ const MOCK_SERVER_CONFIG = {
         exclude_apis: ["^/api/v[0-9]+/bs/rt.*"],
     },
     biz_config: {
-        "1988": {
+        [String(PROFILE.aid)]: {
             enable_web_sdk: true,
             enable_web_sign: true,
             enable_web_rt: true,
@@ -565,11 +603,46 @@ function makeJsonResponse(payload, status = 200) {
     return response;
 }
 
+// With rt_passthrough the SDK's own /bs/rt reaches TikTok: it returns the bs token every
+// BSID carries, bound to this cookie session. Node's https is used because the vendor
+// scripts replace fetch/Buffer globals. Everything else stays mocked.
+function isBsRt(url) { return /\/api\/v1\/bs\/rt(\?|$)/.test(String(url)); }
+function realBsRt(url, method, headers, body) {
+    const absolute = new URL(String(url), PAGE_URL);
+    const h = {};
+    const entries = Array.isArray(headers) ? headers
+        : headers && typeof headers.entries === "function" ? [...headers.entries()] : Object.entries(headers || {});
+    for (const [name, value] of entries) h[String(name).toLowerCase()] = String(value);
+    Object.assign(h, {
+        cookie: serializeCookies(), "user-agent": PROFILE.navigator.userAgent,
+        origin: new URL(PAGE_URL).origin, referer: PAGE_URL,
+    });
+    if (!h["content-type"]) h["content-type"] = "application/json";
+    const payload = body == null ? "" : String(body);
+    return new Promise((resolve, reject) => {
+        const req = https.request(absolute, { method: method || "POST", headers: h }, res => {
+            const chunks = [];
+            res.on("data", chunk => chunks.push(chunk));
+            res.on("end", () => {
+                for (const line of [].concat(res.headers["set-cookie"] || [])) fakeDocument.cookie = line;
+                resolve({ status: res.statusCode, text: NativeBuffer.concat(chunks).toString("utf8") });
+            });
+        });
+        req.on("error", reject);
+        req.setTimeout(20000, () => req.destroy(new Error("bs/rt timeout")));
+        req.end(payload);
+    });
+}
+
 const capturedRequests = [];
 const transportFetch = env.setFuncNative(async function fetch(input, init) {
     const url = typeof input === "string" || input instanceof URL ? String(input) : input.url;
     const headers = new NativeHeaders((init && init.headers) || (input && input.headers) || undefined);
     capturedRequests.push({ url, headers: Object.fromEntries(headers.entries()), method: (init && init.method) || (input && input.method) || "GET", body: init && init.body });
+    if (PROFILE.rt_passthrough && isBsRt(url)) {
+        const real = await realBsRt(url, (init && init.method) || "POST", (init && init.headers) || undefined, init && init.body);
+        return makeJsonResponse(JSON.parse(real.text || "{}"), real.status);
+    }
     if (url.includes("/api/v1/bs/setting")) {
         return makeJsonResponse({
             data: JSON.stringify(MOCK_SERVER_CONFIG),
@@ -598,6 +671,16 @@ XMLHttpRequest.prototype.getAllResponseHeaders = env.setFuncNative(function getA
 XMLHttpRequest.prototype.getResponseHeader = env.setFuncNative(function getResponseHeader(name) { return String(name).toLowerCase() === "content-type" ? "application/json" : null; }, "getResponseHeader", 1);
 XMLHttpRequest.prototype.send = env.setFuncNative(function send(body) {
     capturedRequests.push({ url: this._url, headers: Object.fromEntries(this._headers), method: this._method || "GET", body });
+    if (PROFILE.rt_passthrough && isBsRt(this._url)) {
+        const xhr = this;
+        realBsRt(this._url, this._method, this._headers, body).then(real => {
+            xhr.readyState = 4; xhr.status = real.status;
+            xhr.responseText = real.text; xhr.response = real.text;
+            if (typeof xhr.onreadystatechange === "function") xhr.onreadystatechange();
+            if (typeof xhr.onload === "function") xhr.onload();
+        }, () => { xhr.readyState = 4; xhr.status = 0; if (typeof xhr.onerror === "function") xhr.onerror(); });
+        return;
+    }
     this.readyState = 4;
     this.status = 200;
     this.responseText = String(this._url || "").includes("/api/v1/bs/setting")
@@ -692,25 +775,27 @@ async function boot(options = {}) {
     seedSecurityStorage();
     currentScript = loaderScript;
     vm.runInThisContext(code.loader, { filename: "loader.js" });
-    currentScript = webmssdkScript;
-    vm.runInThisContext(code.webmssdk, { filename: "webmssdk.js" });
+    if (PROFILE.webmssdk) {
+        currentScript = webmssdkScript;
+        vm.runInThisContext(code.webmssdk, { filename: "webmssdk.js" });
+    }
     currentScript = loaderScript;
     await new Promise(resolve => setTimeout(resolve, 100));
     if (fakeWindow.lucifer && typeof fakeWindow.lucifer.init === "function") {
         await fakeWindow.lucifer.init({
-            aid: 1988,
+            aid: PROFILE.aid,
             ttwid: "",
-            region: "sg",
-            mode: 516,
+            region: PROFILE.lucifer.region,
+            mode: PROFILE.lucifer.mode,
             isSDK: false,
             isBoe: false,
             custom: {},
-            initialPathList: ["^/captcha/get", "^/captcha/verifyV2", "^/captcha/feedbackV2", "^/.*"],
+            initialPathList: PROFILE.lucifer.initialPathList,
             excludePathList: [],
         });
         await new Promise(resolve => setTimeout(resolve, 100));
     }
-    if (fakeWindow.byted_acrawler && typeof fakeWindow.byted_acrawler.init === "function") {
+    if (PROFILE.webmssdk && fakeWindow.byted_acrawler && typeof fakeWindow.byted_acrawler.init === "function") {
         const webmssdkInit = fakeWindow.byted_acrawler.init({
             aid: 1988,
             isSDK: false,
@@ -750,4 +835,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { boot, capturedRequests, diagnostics, fakeWindow, seedCookies, transportFetch };
+module.exports = { boot, capturedRequests, diagnostics, fakeWindow, seedCookies, serializeCookies, transportFetch, PROFILE };
