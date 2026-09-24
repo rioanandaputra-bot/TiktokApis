@@ -28,7 +28,7 @@ const NativeBuffer = require("buffer").Buffer;
 
 // Everything page-specific comes from a profile. The defaults are the TikTok Shop PDP
 // this runner was written for; TIKTOK_BSID_PROFILE swaps in another OEC page: the profile
-// as inline JSON (what signing/lucifer_bsid.py passes, from tiktok_shop_constants.py
+// as inline JSON (what signing/lucifer_bsid.py passes, from tiktok_shop/constants.py
 // BSID_PROFILES), or a JSON file (absolute, or relative to ./profiles).
 const DEFAULT_PROFILE = {
     page_url: "https://shop.tiktok.com/jp/pdp/ruzofo-2-4-ko-setto-silicone-hallux-valgus-correction-tool/1734259790973994282",

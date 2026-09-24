@@ -4,12 +4,12 @@
 on the page -- URL, SDK versions, `lucifer.init` config, navigator, screen -- comes from a
 profile. With no profile the runner behaves exactly as before (TikTok Shop PDP).
 
-The profiles themselves live in `tiktok_shop_constants.py` (`BSID_PROFILES`), with where each
+The profiles themselves live in `tiktok_shop/constants.py` (`BSID_PROFILES`), with where each
 value was read and how to update it. `signing/lucifer_bsid.py` passes the chosen one to the
 runner as inline JSON:
 
 ```bash
-TIKTOK_BSID_PROFILE="$(python3 -c 'import json, tiktok_shop_constants as c; print(json.dumps(c.BSID_PROFILES["affiliate-id"]))')" \
+TIKTOK_BSID_PROFILE="$(python3 -c 'import json, tiktok_shop.constants as c; print(json.dumps(c.BSID_PROFILES["affiliate-id"]))')" \
   node reverse/tiktok_shop_bsid/env/bsid.js < request.json      # from the repository root
 ```
 
@@ -53,4 +53,4 @@ UA per line was checked to give each session its own token in the BSID.
 affiliate endpoints such as `invitation_group/detail` accept X-Bogus/X-Gnarly from the
 pure encoders plus a BSID from `lucifer._s({method, body, url, flag})` over that URL, and
 reject any BSID from a different signing. When TikTok ships new unisec versions, update the
-two vendor files and the URLs in the profile together (steps in tiktok_shop_constants.py).
+two vendor files and the URLs in the profile together (steps in tiktok_shop/constants.py).

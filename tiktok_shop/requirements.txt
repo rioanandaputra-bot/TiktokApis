@@ -1,0 +1,4 @@
+# tiktok_shop on top of the repository requirements (curl_cffi, Pillow). Node.js >= 18 with
+# `npm ci` in tiktok_shop/js/ (jsdom) for the device minter and the captcha oracle.
+opencv-python-headless>=4.8,<5
+numpy>=1.24,<3

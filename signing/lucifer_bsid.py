@@ -14,10 +14,10 @@ from typing import Iterable, Mapping
 
 
 def _profiles() -> dict:
-    """BSID_PROFILES from tiktok_shop_constants.py (loaded by path: this module is also
+    """BSID_PROFILES from tiktok_shop/constants.py (loaded by path: this module is also
     loaded by path, outside the package)."""
     import importlib.util
-    path = Path(__file__).resolve().parents[1] / "tiktok_shop_constants.py"
+    path = Path(__file__).resolve().parents[1] / "tiktok_shop" / "constants.py"
     spec = importlib.util.spec_from_file_location("tiktokapis_shop_constants", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -35,7 +35,7 @@ class _RunnerRejected(Exception):
 class LuciferBSIDSigner:
     """Run the immutable official unisec loader/core through ``bsid.js``.
 
-    The page comes from a profile: a name in ``tiktok_shop_constants.BSID_PROFILES``
+    The page comes from a profile: a name in ``tiktok_shop.constants.BSID_PROFILES``
     (passed to the runner inline), or a JSON file for ``run.js``.
     ``mint_token`` boots the SDK once for a cookie session and lets it fetch
     its own bs token from ``/bs/rt``.  ``sign`` keeps one ``bsid.js --serve``

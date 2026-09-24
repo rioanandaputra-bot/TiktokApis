@@ -18,4 +18,4 @@ CDN base: `https://sf16-website-login.neutral.ttwstatic.com/obj/tiktok_web_login
 
 When TikTok ships a new version (its `setting_version` in the bdturing decision conf), add a
 new directory from the CDN rather than editing an existing one, then point
-`CAPTCHA_V2_SDK` in `tiktok_shop_constants.py` at it.
+`CAPTCHA_V2_SDK` in `tiktok_shop/constants.py` at it.

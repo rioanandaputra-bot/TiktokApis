@@ -3,8 +3,8 @@
 Everything a client needs to look like TikTok's own web pages -- hosts, app ids, SDK and build
 versions, signing modes, salts, the page profiles the in-process SDK runners boot -- lives
 here, for this fork's own additions (signing/lucifer_bsid.py, reverse/tiktok_shop_bsid,
-reverse/oec_captcha) and for every consumer of the fork (GrowSeller loads this file through
-app/common/tiktok_vendor.py). Nothing TikTok-specific is read from environment variables:
+reverse/oec_captcha, tiktok_shop) and for every consumer of the fork (GrowSeller imports
+`tiktok_shop`). Nothing TikTok-specific is read from environment variables:
 change a value here, commit, and move the submodule pin.
 
 Values owned by upstream cv-cat/TiktokApis (the X-Bogus/X-Gnarly algorithm internals in
@@ -187,6 +187,10 @@ FRONTIER_SUBPROTOCOLS = ["binary", "base64", "pbbp2"]
 FRONTIER_ACCESS_KEY_SALT = "f8a69f1719916z"
 FRONTIER_VERSION_CODE = "10000"
 FRONTIER_ORIGIN = AFFILIATE
+# IM app id / fp id the web SDK sends when an IM token names none (seller/im HAR; the token
+# from /seller/im/get/token normally carries both).
+IM_APP_ID = "380360"
+IM_FP_ID = 448
 
 # ============================================================================ device
 # The identity every GrowSeller shop presented before per-shop devices (Mac, Chrome 131) --
@@ -202,6 +206,6 @@ LEGACY_IMPERSONATE = "chrome131"
 # generator) works; /seller/im loads ~11 scripts against the creator-marketplace SPA's ~42, so
 # secsdk runs sooner (GrowSeller production: ~3.1-3.6 s per mint with s_v_web_id set).
 # Update: if mints start timing out, try another Affiliate Center page and compare the
-# minter's logged duration ("[browser_fp]" lines in the API/worker logs).
+# minter's logged duration ("[device_mint]" lines in the API/worker logs).
 SECSDK_MINT_URL = f"{AFFILIATE_IM_PAGE}?shop_region={REGION}"
 SECSDK_MINT_WAIT_MS = 14000

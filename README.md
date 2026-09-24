@@ -112,7 +112,7 @@ author/logo.svg              项目 Logo
 
 ## 🔐 OEC Lucifer BSID（页面 profile）
 
-`reverse/tiktok_shop_bsid/env/run.js` 的页面相关参数（URL、unisec 版本、`lucifer.init` 配置、navigator、screen）来自 profile，默认仍是 Shop PDP，行为不变。`tiktok_shop_constants.py` 中的 `BSID_PROFILES["affiliate-id"]` 对应 affiliate-id.tokopedia.com（Affiliate Center），配套 `vendor/affiliate-id/` 下的官方 loader/core 原样副本。说明见 `reverse/tiktok_shop_bsid/env/PROFILES.md`。
+`reverse/tiktok_shop_bsid/env/run.js` 的页面相关参数（URL、unisec 版本、`lucifer.init` 配置、navigator、screen）来自 profile，默认仍是 Shop PDP，行为不变。`tiktok_shop/constants.py` 中的 `BSID_PROFILES["affiliate-id"]` 对应 affiliate-id.tokopedia.com（Affiliate Center），配套 `vendor/affiliate-id/` 下的官方 loader/core 原样副本。说明见 `reverse/tiktok_shop_bsid/env/PROFILES.md`。
 
 ```python
 from signing import LuciferBSIDSigner
@@ -126,11 +126,29 @@ bsid, = signer.sign(cookie=f"{cookie}; oec_lucifer={token}", user_agent=ua,
 url = f"{pre_sign_url}&X-Tts-Oec-Bsid={bsid}"
 ```
 
-请求需同时携带 `oec_lucifer=<token>` Cookie。更新 unisec 版本时同时替换 vendor 文件与 `tiktok_shop_constants.py` 中 profile 的 URL。
+请求需同时携带 `oec_lucifer=<token>` Cookie。更新 unisec 版本时同时替换 vendor 文件与 `tiktok_shop/constants.py` 中 profile 的 URL。
 
-## 📌 TikTok Shop 常量（tiktok_shop_constants.py）
+## 🛒 tiktok_shop（TikTok Shop / Tokopedia 印尼站客户端）
 
-TikTok Shop（Tokopedia 印尼站）用到的所有取值——域名、aid、SDK/构建版本、签名模式、盐值、SDK 运行器的页面 profile——统一定义在 `tiktok_shop_constants.py`，本仓库新增部分与下游（GrowSeller）都从这里读取，不再使用环境变量。每组取值都注明来源页面、最近核实日期以及重新获取与更新的步骤。上游（cv-cat）自带的算法内部常量不迁移，以保持合并上游时无冲突。
+`tiktok_shop/` 是本 fork 新增的包，把与 TikTok Shop 交互的全部逻辑集中在一处，下游（GrowSeller）只负责自己的存储与业务并调用它。不修改任何上游文件，合并上游时无冲突。
+
+| 模块 | 内容 |
+| --- | --- |
+| `constants.py` | 全部取值（域名、aid、SDK/构建版本、签名模式、盐值、BSID 页面 profile），每组注明来源、核实日期与更新步骤 |
+| `device.py` | 会话设备（UA、TLS 目标、client hints、navigator）及其构造方式 |
+| `signing.py` | 基于上游 `signing/pure.py` 的 X-Bogus / X-Gnarly（同一时钟） |
+| `web.py` | 浏览器风格的 query 编码与 client hints |
+| `cookies.py` | Netscape cookie 格式 |
+| `login.py` | 子账号邀请激活、登录、验证码（verify-sg）、OTP、会话导出 |
+| `captcha.py` | Affiliate Center 滑块验证码（SDK 3.x，经 `js/captcha_oracle.js` 加解密） |
+| `device_mint.py` | 无浏览器生成设备 cookie（`js/mint_svwebid.js`） |
+| `im/protobuf.py`, `im/frontier.py` | IM 请求/消息编码、Frontier 握手与推送解码 |
+
+使用：把仓库根目录加入 `sys.path` 后 `import tiktok_shop`；Python 依赖见 `tiktok_shop/requirements.txt`，Node 依赖在 `tiktok_shop/js/` 执行 `npm ci`（或以 `NODE_PATH` 指向已安装的 `node_modules`）。
+
+### 常量
+
+TikTok Shop 用到的所有取值统一定义在 `tiktok_shop/constants.py`，本仓库新增部分与下游都从这里读取，不再使用环境变量。每组取值都注明来源页面、最近核实日期以及重新获取与更新的步骤。上游（cv-cat）自带的算法内部常量不迁移，以保持合并上游时无冲突。
 
 ## ⚠️ 范围与限制
 
