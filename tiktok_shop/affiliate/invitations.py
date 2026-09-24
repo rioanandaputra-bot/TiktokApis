@@ -174,6 +174,48 @@ def creators_of(invitation: Dict[str, Any]) -> List[Dict[str, Any]]:
     return out
 
 
+def _price(p: Dict[str, Any], key: str) -> Optional[str]:
+    return (((p.get(key) or {}).get("min_price") or {}).get("format_price"))
+
+
+def info_of(invitation: Dict[str, Any]) -> Dict[str, Any]:
+    """What the detail page shows above its creators, from a detail answer: settings and
+    products (image URLs are signed; read, never keep)."""
+    rule = invitation.get("free_sample_rule") or {}
+    content = _as_int((invitation.get("delivery_requirements") or {}).get("content_option"))
+    whatsapp = next((c.get("value") for c in invitation.get("contacts_info") or []
+                     if c.get("field") == 6 and c.get("value")), None)
+    products = []
+    for p in invitation.get("product_list") or []:
+        image = p.get("image") or {}
+        products.append({
+            "product_id": str(p.get("product_id") or ""),
+            "title": p.get("title"),
+            "image_url": (image.get("thumb_url_list") or image.get("url_list") or [None])[0],
+            "price": _price(p, "price"),
+            "promotion_price": _price(p, "promotion_price"),
+            "target_commission": _as_int(p.get("target_commission")),
+            "ads_commission": _as_int(p.get("target_ads_commission")),
+            "open_commission": _as_int(p.get("open_commission")),
+            "stock": _as_int(p.get("stock")),
+            "item_sold": _as_int(p.get("item_sold")),
+        })
+    return {
+        "invitation_id": str(invitation.get("id") or ""),
+        "name": invitation.get("name"),
+        "message": invitation.get("message"),
+        "whatsapp": whatsapp,
+        "start_time": _as_int(invitation.get("start_time")),
+        "end_time": _as_int(invitation.get("end_time")),
+        "group_status": _as_int(invitation.get("group_status")),
+        "group_type": _as_int(invitation.get("group_type")),
+        "content_type": {v: k for k, v in CONTENT_OPTIONS.items()}.get(content, "NO_PREFERENCE"),
+        "free_sample": bool(rule.get("has_free_sample")),
+        "free_sample_auto_review": bool(rule.get("is_free_sample_auto_review")),
+        "products": products,
+    }
+
+
 def terminate(api: ShopApi, invitation_id: str, group_type: int = 1) -> None:
     """End it. TikTok has no delete: an ended invitation stays, as Canceling then Completed."""
     call(api, "/oec/affiliate/seller/invitation_group/terminate",

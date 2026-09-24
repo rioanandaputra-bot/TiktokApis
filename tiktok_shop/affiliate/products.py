@@ -53,8 +53,7 @@ def _int(v: Any) -> Optional[int]:
 
 
 def product(p: Dict[str, Any]) -> Dict[str, Any]:
-    """A base product (product_selection item or promote_products' base_product), in the
-    shape of GrowSeller's shop_products row."""
+    """A base product (product_selection item or promote_products' base_product), flat."""
     price = p.get("price") or {}
     stock = p.get("stock")
     if stock is None and isinstance(p.get("stock_info"), dict):
