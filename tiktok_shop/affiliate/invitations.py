@@ -23,6 +23,7 @@ STATUSES: List[Tuple[str, str, int]] = [
     ("ongoing",   "Ongoing",   1),
     ("expiring",  "Expiring",  2),
     ("canceling", "Canceling", 3),
+    ("completed", "Completed", 4),
 ]
 COMPLETED = 4
 OPEN_STATUS_CODES = (1, 2, 3)          # creators can be added, the invite edited or ended
@@ -345,3 +346,55 @@ def clean_product(raw: Dict[str, Any]) -> Dict[str, Any]:
         "category_name": (first.get("category_name") or first.get("name")) if first else None,
         "create_time": str(raw.get("create_time") or ""),
     }
+
+
+# ============================================================================ one creator, one level down
+#
+# The detail page's "View details" drawer and the Video/LIVE counts inside it (live page
+# 24 Sep 2026). Detail only says how many products a creator added and posted; which ones,
+# and with how many videos and LIVEs each, is here.
+
+def creator_products(api: ShopApi, invitation_id: str, creator_id: str) -> List[Dict[str, Any]]:
+    """What one creator did with each product of the invitation: [{product_id, in_showcase,
+    video_count, live_count, commission_effective, product}], `product` being TikTok's
+    product_base_info (title, prices, commissions, stock) for the caller's product master."""
+    data = call(api, "/oec/affiliate/seller/invitation_group/creator_promotion_detail",
+                {"creator_id": str(creator_id), "invitation_group_id": str(invitation_id)})
+    out = []
+    for p in data.get("product_detail_list") or []:
+        base = (p or {}).get("product_base_info") or {}
+        if not base.get("product_id"):
+            continue
+        out.append({
+            "product_id": str(base["product_id"]),
+            "in_showcase": bool(p.get("product_add_status")),
+            # Absent, not zero, when the product was never added.
+            "video_count": _as_int(p.get("video_count")) or 0,
+            "live_count": _as_int(p.get("live_count")) or 0,
+            "commission_effective": bool(p.get("commission_effective")),
+            "product": base,
+        })
+    return out
+
+
+def creator_videos(api: ShopApi, invitation_id: str, creator_id: str, product_id: str,
+                   offset: int = 0, size: int = 20) -> Dict[str, Any]:
+    """The videos one creator posted for one product of the invitation, newest first as TikTok
+    orders them: {videos: [{item_id, name, release_date, play_cnt, like_cnt, comment_cnt,
+    cover_url}], has_more}. Cover and play URLs are signed and expire, so read, never keep."""
+    data = call(api, "/oec/affiliate/seller/invitation_group/creator_video_list", {
+        "creator_id": str(creator_id), "invitation_group_id": str(invitation_id),
+        "product_id": str(product_id), "size": size, "offset": offset})
+    videos = []
+    for v in data.get("video_list") or []:
+        media = (v or {}).get("video") or {}
+        videos.append({
+            "item_id": str(v.get("item_id") or ""),
+            "name": (v.get("name") or "").strip(),
+            "release_date": _as_int(v.get("release_date")),
+            "play_cnt": _as_int(v.get("play_cnt")) or 0,
+            "like_cnt": _as_int(v.get("like_cnt")) or 0,
+            "comment_cnt": _as_int(v.get("comment_cnt")) or 0,
+            "cover_url": media.get("post_url"),
+        })
+    return {"videos": videos, "has_more": bool(data.get("has_more"))}

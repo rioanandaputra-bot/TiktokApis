@@ -49,6 +49,18 @@ STATUSES: List[Tuple[str, str, Tuple[int, ...]]] = [
     ("expired",              "Expired",              (52,)),
 ]
 
+# Where a request came from (`source_type`), with the page's own "Request channel" wording:
+# allow_search_source_types of affiliate/sample/tab/list, live 24 Sep 2026. 0, 1 and 7 are the
+# three kinds of collaboration; 6 appears in real data but the page does not name it.
+SOURCE_TYPES = {
+    0: "Open collaboration",
+    1: "Target collaboration",
+    3: "Partner campaign",
+    5: "TikTok Shop campaign",
+    7: "Collaboration Plus",
+}
+COLLABORATION_SOURCES = (0, 1, 7)
+
 # Every code the buckets above claim. Anything else is "Others" — see the module note.
 _KNOWN = {code for _, _, codes in STATUSES for code in codes}
 
@@ -82,25 +94,58 @@ def fetch_page(api: ShopApi, page: int) -> Dict[str, Any]:
     })
 
 
+# apply_info fields that belong to the shop's master data (creator, product, SKU) or are
+# already columns of the request row; everything else stays with the request as `detail`.
+_NOT_DETAIL = ("apply_id", "curr_status", "create_time", "product_id", "sku_id", "source_type",
+               "product_title", "sku_desc", "sku_image", "sku_price", "sku_stock", "region")
+
+
+def creator_of(info: Dict[str, Any]) -> Dict[str, Any]:
+    """The creator a request came from, as shop master data. Its top videos (the bulk of the
+    payload, with signed URLs) are not kept; the avatar URL is signed and expires within
+    days, so it is refreshed by every sync rather than trusted forever."""
+    return {
+        "creator_id": str(info.get("creator_id") or ""),
+        "handle": info.get("name"),
+        "nickname": info.get("nick_name"),
+        "avatar_url": info.get("avatar_url"),
+        "follower_num": _as_int(info.get("follower_num")),
+        "ecom_level": _as_int(info.get("ecom_level")),
+        "fulfillment_rate": info.get("fulfillment_rate"),
+    }
+
+
 def rows_from(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Flatten TikTok's creator-grouped payload into one row per request.
 
-    Only the four searchable values are lifted out; the request keeps its whole
-    apply_info, with the creator it belongs to folded in under `creator`, so the page
-    can render any field without this function having to know about it.
+    Each row: the request's own columns (apply_id, curr_status, request_created_at,
+    creator_id, product_id, sku_id, source_type), its remaining fields as `detail`, and the
+    master data it mentions -- `creator`, `product` {product_id, title} and `sku` -- for the
+    caller to keep once per shop rather than once per request.
     """
     out: List[Dict[str, Any]] = []
     for agg in payload.get("agg_info") or []:
-        creator = (agg.get("apply_group") or {}).get("creator_info") or {}
+        creator = creator_of((agg.get("apply_group") or {}).get("creator_info") or {})
         # "apply_deatil" is TikTok's spelling; do not correct it.
         for a in ((agg.get("apply_deatil") or {}).get("apply_infos") or []):
             if not a.get("apply_id"):
                 continue
+            pid, sku = str(a.get("product_id") or ""), str(a.get("sku_id") or "")
+            price = (a.get("sku_price") or {}).get("price_value")
             out.append({
                 "apply_id": str(a["apply_id"]),
                 "curr_status": int(a.get("curr_status") or 0),
                 "request_created_at": _as_int(a.get("create_time")),
-                "raw": dict(a, creator=creator),
+                "creator_id": creator["creator_id"] or None,
+                "product_id": pid or None,
+                "sku_id": sku or None,
+                "source_type": _as_int(a.get("source_type")),
+                "detail": {k: v for k, v in a.items() if k not in _NOT_DETAIL},
+                "creator": creator,
+                "product": {"product_id": pid, "title": a.get("product_title")},
+                "sku": {"sku_id": sku, "product_id": pid, "sku_desc": a.get("sku_desc"),
+                        "image_url": a.get("sku_image"), "price": _as_int(price),
+                        "stock": _as_int(a.get("sku_stock"))},
             })
     return out
 
