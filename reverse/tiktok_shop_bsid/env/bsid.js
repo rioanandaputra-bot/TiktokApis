@@ -8,9 +8,13 @@
 //   With no oec_lucifer in the cookie and rt_passthrough on, the SDK fetches one from /bs/rt.
 //
 // --serve: boot once, then sign for any session, one JSON object per line.
-//   in : {"id": 1, "cookie": "...; oec_lucifer=<token>", "ua": "<optional>", "requests": [...]}
+//   in : {"id": 1, "cookie": "...; oec_lucifer=<token>", "navigator": {...}?, "ua": "<optional>", "requests": [...]}
 //   out: {"id": 1, "bsids": [...]}  or  {"id": 1, "error": "..."}
 //   The token must be in the cookie (get it with a one-shot run); ~2 ms per BSID.
+//
+// "navigator" (both modes) overrides the profile's device for that session: userAgent,
+// platform, language, languages, hardwareConcurrency, deviceMemory, maxTouchPoints and
+// "screen": {width, height, availWidth, availHeight}. Omitted keys keep the profile's.
 //
 // The pre-sign URL must already carry msToken, X-Bogus and X-Gnarly/_signature in their
 // final spelling: Lucifer signs the URL exactly as it will be sent, then the caller
@@ -56,12 +60,24 @@ function signAll(requests) {
     });
 }
 
+const baseNavigator = { ...runtime.PROFILE.navigator };
+const baseScreen = { ...runtime.PROFILE.screen };
+
+// The runtime's getters read PROFILE on every access, so swapping it per session is enough.
+function useDevice(navigator, ua) {
+    const { screen, ...fields } = (navigator && typeof navigator === "object") ? navigator : {};
+    runtime.PROFILE.navigator = { ...baseNavigator, ...fields };
+    if (ua) runtime.PROFILE.navigator.userAgent = String(ua);
+    runtime.PROFILE.screen = { ...baseScreen, ...((screen && typeof screen === "object") ? screen : {}) };
+}
+
 function cookieValue(cookie, name) {
     const match = String(cookie || "").match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
     return match ? match[1] : "";
 }
 
 async function oneShot() {
+    useDevice(input.navigator);
     await runtime.boot({ cookie: input.cookie });
     // /bs/rt (rt_passthrough) answers asynchronously; wait until the token has landed.
     const deadline = Date.now() + Number(input.token_wait_ms || 8000);
@@ -77,7 +93,6 @@ async function oneShot() {
 
 async function serveLines() {
     await runtime.boot({ cookie: "" });
-    const defaultUa = runtime.PROFILE.navigator.userAgent;
     const lines = readline.createInterface({ input: nativeProcess.stdin });
     nativeProcess.stdout.write(JSON.stringify({ ready: true }) + "\n");
     for await (const line of lines) {
@@ -89,7 +104,7 @@ async function serveLines() {
             if (!/^[0-9a-f]{160,}$/i.test(token)) throw new Error("oec_lucifer token missing from cookie");
             runtime.seedCookies(message.cookie);
             runtime.fakeWindow.localStorage.setItem("_lcf_v", token);
-            runtime.PROFILE.navigator.userAgent = message.ua || defaultUa;
+            useDevice(message.navigator, message.ua);
             nativeProcess.stdout.write(JSON.stringify({ id: message.id, bsids: signAll(message.requests || []) }) + "\n");
         } catch (error) {
             nativeProcess.stdout.write(JSON.stringify({ id: message.id, error: String(error && error.message || error) }) + "\n");

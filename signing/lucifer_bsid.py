@@ -80,11 +80,14 @@ class LuciferBSIDSigner:
                         "body": "" if body is None else str(body)})
         return out
 
-    def mint_token(self, *, cookie: str, user_agent: str = "") -> str:
-        """Let the SDK fetch a bs token for this cookie session (one boot)."""
+    def mint_token(self, *, cookie: str, user_agent: str = "",
+                   navigator: Mapping | None = None) -> str:
+        """Let the SDK fetch a bs token for this cookie session (one boot).
+
+        ``navigator`` describes the session's device (see ``bsid.js``)."""
         self._check()
         cookie = self._OEC_COOKIE.sub("", str(cookie or "")).strip("; ")
-        payload = {"cookie": cookie, "requests": [
+        payload = {"cookie": cookie, "navigator": dict(navigator or {}), "requests": [
             {"method": "GET", "url": "https://localhost/api/v1/bs/ping", "body": ""}]}
         try:
             completed = subprocess.run(
@@ -147,11 +150,14 @@ class LuciferBSIDSigner:
             raise LuciferBSIDError("Lucifer BSID 常驻进程返回了非 JSON 数据") from exc
 
     def sign(self, *, cookie: str, user_agent: str = "",
-             requests: Iterable[Mapping[str, str] | tuple[str, str, str]]) -> list[str]:
+             requests: Iterable[Mapping[str, str] | tuple[str, str, str]],
+             navigator: Mapping | None = None) -> list[str]:
         """BSIDs for the given pre-sign requests, in order.
 
         Each URL must already carry msToken, X-Bogus and X-Gnarly exactly as
         they will be sent; ``cookie`` must carry the session's ``oec_lucifer``.
+        ``navigator`` describes the session's device (see ``bsid.js``); the
+        runner keeps no device between requests.
         """
         self._check()
         match = self._OEC_COOKIE.search(str(cookie or ""))
@@ -166,7 +172,8 @@ class LuciferBSIDSigner:
                     self._sequence += 1
                     self._process.stdin.write(json.dumps({
                         "id": self._sequence, "cookie": str(cookie),
-                        "ua": str(user_agent or ""), "requests": batch,
+                        "ua": str(user_agent or ""), "navigator": dict(navigator or {}),
+                        "requests": batch,
                     }, ensure_ascii=False) + "\n")
                     self._process.stdin.flush()
                     result = self._read(self.sign_timeout)

@@ -31,7 +31,12 @@ X-Gnarly already in place); append `&X-Tts-Oec-Bsid=<bsid>` and send the request
 `oec_lucifer` in the cookie and `rt_passthrough` on, the SDK fetches the token first.
 
 `--serve`: boot once, then one JSON object per line, for any session:
-`{"id", "cookie", "ua"?, "requests"}` -> `{"id", "bsids"}` or `{"id", "error"}`. The
+`{"id", "cookie", "navigator"?, "ua"?, "requests"}` -> `{"id", "bsids"}` or `{"id", "error"}`.
+
+`navigator` (both modes) is the session's device and overrides the profile's for that
+request only: `userAgent`, `platform`, `language`, `languages`, `hardwareConcurrency`,
+`deviceMemory`, `maxTouchPoints`, and `screen: {width, height, availWidth, availHeight}`.
+It is part of what the SDK signs -- a session should always present the same one. The
 cookie must carry the session's `oec_lucifer` (mint it with a one-shot run); the boot
 itself never calls `/bs/rt`. ~2 ms per BSID, ~70 MB resident. Swapping cookie, token and
 UA per line was checked to give each session its own token in the BSID.
