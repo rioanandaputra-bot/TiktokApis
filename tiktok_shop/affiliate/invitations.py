@@ -216,6 +216,50 @@ def info_of(invitation: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+# ============================================================================ as stored
+#
+# The shape GrowSeller keeps an invitation in, and sends back through group_body():
+#   invitation {title, valid_until, phone, content_type, sample_type, message}
+#   products   [{id, standard_commission, ads_commission}]
+
+def invitation_of(invitation: Dict[str, Any]) -> Dict[str, Any]:
+    """A detail answer's settings, the inverse of group_body() -- sending it back unchanged
+    changes nothing on TikTok."""
+    rule = invitation.get("free_sample_rule") or {}
+    sample = ("AUTO" if rule.get("is_free_sample_auto_review") else "MANUAL") if rule.get("has_free_sample") else None
+    end = _as_int(invitation.get("end_time"))
+    content = _as_int((invitation.get("delivery_requirements") or {}).get("content_option"))
+    return {
+        "title": invitation.get("name") or "",
+        "valid_until": (datetime.fromtimestamp(end / 1000, ZoneInfo(tt.TIMEZONE)).strftime("%Y-%m-%d")
+                        if end else None),
+        "phone": next((c.get("value") for c in invitation.get("contacts_info") or []
+                       if c.get("field") == 6 and c.get("value")), None),
+        "content_type": {v: k for k, v in CONTENT_OPTIONS.items()}.get(content, "NO_PREFERENCE"),
+        "sample_type": sample,
+        "message": invitation.get("message") or "",
+    }
+
+
+def products_of(invitation: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """A detail answer's products with the commissions it offers."""
+    return [{"id": str(p["product_id"]),
+             "standard_commission": _as_int(p.get("target_commission")) or 0,
+             "ads_commission": _as_int(p.get("target_ads_commission"))}
+            for p in invitation.get("product_list") or [] if p.get("product_id")]
+
+
+def stored_group(invitation: Dict[str, Any], products: List[Dict[str, Any]],
+                 creator_ids: Iterable[str], name: Optional[str] = None) -> Dict[str, Any]:
+    """group_body() from the stored shape."""
+    return group_body(name=name or invitation.get("title") or "", message=invitation.get("message") or "",
+                      whatsapp=invitation.get("phone"), valid_until=invitation.get("valid_until"),
+                      sample_type=invitation.get("sample_type"), content_type=invitation.get("content_type"),
+                      products=[{"product_id": p["id"], "standard_commission": p.get("standard_commission") or 0,
+                                 "ads_commission": p.get("ads_commission")} for p in products],
+                      creator_ids=creator_ids)
+
+
 def terminate(api: ShopApi, invitation_id: str, group_type: int = 1) -> None:
     """End it. TikTok has no delete: an ended invitation stays, as Canceling then Completed."""
     call(api, "/oec/affiliate/seller/invitation_group/terminate",
