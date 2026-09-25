@@ -16,6 +16,7 @@ from ..client import decode_body, ok_data
 from . import ShopApi
 
 PAGE_SIZE = 50          # what the list page asks for
+MAX_PAGE_SIZE = tt.INVITATION_SEARCH_MAX_PAGE_SIZE     # the most search accepts, for a full walk
 
 # Status tabs and the codes count/search answer with (live page 23 Sep 2026: the tab labels
 # read Ongoing 9, Expiring 0, Canceling 0, Completed 88 and count returned exactly those).
@@ -83,22 +84,39 @@ def call(api: ShopApi, path: str, body: Optional[Dict[str, Any]] = None, method:
     return ok_data(raw, path).get("data") or {}
 
 
-# The list page's "Search by invitation name" box sends its text as query item type 4
-# (live page 24 Sep 2026); TikTok matches on part of the name.
-QUERY_NAME = 4
+# The list page's search (live pages 24 and 26 Sep 2026). One box with a field select --
+# Invitation name, Invitation ID, Product name, Product ID -- and a creator box whose pick is
+# sent as the creator's oec id. Each is one query item {type, key}; names match loosely.
+# The list has no sorting: it comes newest first and the page offers no sort control.
+QUERY_TYPES = {"product_id": 1, "product_name": 2, "invitation_id": 3, "name": 4, "creator_id": 6}
+QUERY_NAME = QUERY_TYPES["name"]
 
 
-def _search_params(name: str = "") -> Dict[str, Any]:
-    items = [{"type": QUERY_NAME, "key": name}] if name.strip() else []
+def _search_params(query: Any = None) -> Dict[str, Any]:
+    """`query`: {field of QUERY_TYPES: text}, or a bare string for a name search."""
+    if isinstance(query, str):
+        query = {"name": query}
+    items = [{"type": QUERY_TYPES[field], "key": str(key).strip()}
+             for field, key in (query or {}).items() if str(key or "").strip()]
     return {"query_items": items, "filter_accept_status": 3, "search_group_type": list(SEARCH_GROUP_TYPES)}
 
 
-def search(api: ShopApi, status_code: int, page: int, name: str = "") -> Dict[str, Any]:
-    """One page (PAGE_SIZE) of invitations in one status, optionally only those whose name
-    contains `name`: {invitation_list, total, has_more}."""
+def search(api: ShopApi, status_code: int, page: int, query: Any = None,
+           page_size: int = PAGE_SIZE) -> Dict[str, Any]:
+    """One page of invitations in one status, optionally narrowed by `query` (see
+    _search_params): {invitation_list, total, has_more}. page_size at most MAX_PAGE_SIZE."""
     return call(api, "/oec/affiliate/seller/invitation_group/search", {
-        "search_params": _search_params(name), "invitation_group_status": status_code,
-        "page_size": PAGE_SIZE, "cur_page": page})
+        "search_params": _search_params(query), "invitation_group_status": status_code,
+        "page_size": min(page_size, MAX_PAGE_SIZE), "cur_page": page})
+
+
+def find_creators(api: ShopApi, handle: str, size: int = 20) -> List[Dict[str, Any]]:
+    """The creator box's suggestions for what was typed (search/creator, query_by 1 = handle):
+    [{id, handle, nickname}]. The list is then searched by the picked creator's id."""
+    data = call(api, "/oec/affiliate/seller/invitation_group/search/creator", {
+        "size": size, "search_id": "0", "query": handle.strip().lstrip("@"), "query_by": 1})
+    return [{"id": str(c["creator_oec_id"]), "handle": c.get("user_name"), "nickname": c.get("nick_name")}
+            for c in data.get("creators") or [] if c.get("creator_oec_id")]
 
 
 def items(page: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -106,10 +124,20 @@ def items(page: Dict[str, Any]) -> List[Dict[str, Any]]:
     return [it for it in (page.get("invitation_list") or []) if it.get("id")]
 
 
-def counts(api: ShopApi, name: str = "") -> Dict[int, int]:
-    """TikTok's own per-status totals {status_code: count}, optionally for a name search."""
+def counts_of(item: Dict[str, Any]) -> Dict[str, int]:
+    """The numbers a search item already carries, so the list needs no detail call:
+    products, creators invited, creators who added a product to their showcase (Accepted),
+    creators who posted content (Promoted)."""
+    return {"products": _as_int(item.get("product_cnt")) or 0,
+            "invited": _as_int(item.get("creator_cnt")) or 0,
+            "accepted": _as_int(item.get("creator_added_cnt")) or 0,
+            "promoted": _as_int(item.get("creator_posted_cnt")) or 0}
+
+
+def counts(api: ShopApi, query: Any = None) -> Dict[int, int]:
+    """TikTok's own per-status totals {status_code: count}, optionally for a search."""
     data = call(api, "/oec/affiliate/seller/invitation_group/count", {
-        "search_params": _search_params(name), "invitation_status": [c for _, _, c in STATUSES]})
+        "search_params": _search_params(query), "invitation_status": [c for _, _, c in STATUSES]})
     rows = data if isinstance(data, list) else (data.get("data") or [])
     return {int(r["invitation_group_status"]): int(r.get("count") or 0)
             for r in rows if isinstance(r, dict) and "invitation_group_status" in r}
@@ -372,10 +400,15 @@ def error_of(response: Any) -> str:
 
 # ============================================================================ product picker
 
+PRODUCT_PAGE_SIZE = tt.PRODUCT_SELECTION_MAX_PAGE_SIZE
+
+
 def product_selection(api: ShopApi, keyword: str = "", product_id: str = "", search_mode: str = "auto",
                       category_id: str = "", page: int = 1, page_size: int = 20) -> Any:
     """The create page's product search (product_selection/list), TikTok's decoded answer.
-    search_mode: "id", "name", or "auto" (a keyword of 10+ digits is a product id)."""
+    search_mode: "id", "name", or "auto" (a keyword of 10+ digits is a product id).
+    page_size at most PRODUCT_PAGE_SIZE."""
+    page_size = min(page_size, PRODUCT_PAGE_SIZE)
     q = api.common_query()
     q["user_language"] = tt.LOCALE
     params = []

@@ -192,3 +192,31 @@ LEGACY_IMPERSONATE = "chrome131"
 # minter's logged duration ("[device_mint]" lines in the API/worker logs).
 SECSDK_MINT_URL = f"{AFFILIATE_IM_PAGE}?shop_region={REGION}"
 SECSDK_MINT_WAIT_MS = 14000
+
+# ---------------------------------------------------------------- Target collaboration list
+# The largest page invitation_group/search accepts. TikTok's own list page asks for 50;
+# 100 answered code=0 with 100 items and 200 was refused with code=98001004 "Invalid
+# parameters" (SKINIVA ID STORE, 26 Sep 2026).
+# Update: call invitation_group/search with page_size 100, then a larger value, and keep the
+# largest one that answers code 0.
+INVITATION_SEARCH_MAX_PAGE_SIZE = 100
+
+# The largest page the invitation create page's product search (product_selection/list)
+# accepts: 100 answered code=0, 101 and above were refused with code=98001004 (GLAM SHINE
+# COSMETICS, 26 Sep 2026).
+# Update: call product_selection/list with page_size 100, then 101, and keep the largest one
+# that answers code 0.
+PRODUCT_SELECTION_MAX_PAGE_SIZE = 100
+
+# How a full sync of a shop's invitations paces its signed calls (GrowSeller's Refresh).
+# Source: nine invitation_group/detail calls back to back ended in code 10000 and a captcha
+# (23 Sep 2026); calls 2.5-5 s apart ran for hundreds of details without one.
+# Update: if a sync starts drawing code 10000 or a captcha, widen the gap and rest first.
+INVITATION_SYNC_LIST_GAP = (0.6, 1.4)     # seconds between two list pages
+INVITATION_SYNC_GAP = (2.5, 5.0)          # seconds between two detail / creator calls
+INVITATION_SYNC_REST_EVERY = (20, 30)     # calls between two longer rests, picked at random
+INVITATION_SYNC_REST = (20.0, 45.0)       # seconds of a longer rest
+# A failed call is tried again up to three times, after about 15 s, 45 s and 2 min (each
+# stretched by a random 0.8-1.3); after the third retry the sync stops and the next one
+# continues from what is left.
+INVITATION_SYNC_RETRY_WAITS = (15.0, 45.0, 120.0)
