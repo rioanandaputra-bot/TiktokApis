@@ -208,15 +208,14 @@ INVITATION_SEARCH_MAX_PAGE_SIZE = 100
 # that answers code 0.
 PRODUCT_SELECTION_MAX_PAGE_SIZE = 100
 
-# How a full sync of a shop's invitations paces its signed calls (GrowSeller's Refresh).
-# Source: nine invitation_group/detail calls back to back ended in code 10000 and a captcha
-# (23 Sep 2026); calls 2.5-5 s apart ran for hundreds of details without one.
-# Update: if a sync starts drawing code 10000 or a captcha, widen the gap and rest first.
-INVITATION_SYNC_LIST_GAP = (0.6, 1.4)     # seconds between two list pages
-INVITATION_SYNC_GAP = (2.5, 5.0)          # seconds between two detail / creator calls
-INVITATION_SYNC_REST_EVERY = (20, 30)     # calls between two longer rests, picked at random
-INVITATION_SYNC_REST = (20.0, 45.0)       # seconds of a longer rest
+# A full sync of a shop's invitations (GrowSeller's Refresh) sends its signed calls back to
+# back, with no gap: each call already takes its own time. Nine invitation_group/detail calls
+# back to back once ended in code 10000 and a captcha (23 Sep 2026); what keeps a sync going
+# then is the retry below, which waits only when TikTok refuses.
+# Update: if syncs start drawing captchas, give the sync a gap again.
 # A failed call is tried again up to three times, after about 15 s, 45 s and 2 min (each
 # stretched by a random 0.8-1.3); after the third retry the sync stops and the next one
 # continues from what is left.
 INVITATION_SYNC_RETRY_WAITS = (15.0, 45.0, 120.0)
+# A bulk action changes invitations one by one; changes stay on the proven 2.5-5 s gap.
+INVITATION_BULK_GAP = (2.5, 5.0)
