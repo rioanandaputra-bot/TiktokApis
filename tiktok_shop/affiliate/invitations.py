@@ -38,8 +38,6 @@ LIMIT_REASONS = {
     2: "TikTok's maximum of open invitations is reached; end or wait out an ongoing one first",
 }
 
-# An invitation holds at most 50 creators (the page splits on the same number; more is refused).
-CREATORS_PER_INVITATION = 50
 # Group name: an over-long one is refused with 98001004 -- the same code as the active-group cap,
 # so it once read as a rate limit. Every name that ever succeeded was 29 characters or fewer.
 MAX_NAME = 30
@@ -84,24 +82,50 @@ def call(api: ShopApi, path: str, body: Optional[Dict[str, Any]] = None, method:
     return ok_data(raw, path).get("data") or {}
 
 
-# The list page's "Search by invitation name" box sends its text as query item type 4
-# (live page 24 Sep 2026); TikTok matches on part of the name. The list has no sorting: it
-# comes newest first and the page offers no sort control.
-QUERY_NAME = 4
+# The list page's search (live pages 24 and 26 Sep 2026): one box with a field select --
+# Invitation name, Invitation ID, Product name, Product ID -- and a creator box whose pick is
+# sent as the creator's oec id. Each is one query item {type, key}; names match loosely.
+# The list has no sorting: it comes newest first and the page offers no sort control.
+QUERY_TYPES = {"product_id": 1, "product_name": 2, "invitation_id": 3, "name": 4, "creator_id": 6}
+QUERY_NAME = QUERY_TYPES["name"]
 
 
-def _search_params(name: str = "") -> Dict[str, Any]:
-    items = [{"type": QUERY_NAME, "key": name}] if name.strip() else []
-    return {"query_items": items, "filter_accept_status": 3, "search_group_type": list(SEARCH_GROUP_TYPES)}
+# The list page's two filter chips (live page 26 Sep 2026): "Accepted invitations" sends
+# filter_accept_status 2 instead of 3 (all), "With free samples" adds free_sample_status 1.
+ACCEPT_ALL, ACCEPT_ONLY = 3, 2
 
 
-def search(api: ShopApi, status_code: int, page: int, name: str = "",
-           page_size: int = PAGE_SIZE) -> Dict[str, Any]:
-    """One page of invitations in one status, optionally only those whose name contains
-    `name`: {invitation_list, total, has_more}. page_size at most MAX_PAGE_SIZE."""
+def _search_params(query: Any = None, accepted: bool = False, with_sample: bool = False) -> Dict[str, Any]:
+    """`query`: {field of QUERY_TYPES: text}, or a bare string for a name search.
+    `accepted` / `with_sample`: the page's two filters."""
+    if isinstance(query, str):
+        query = {"name": query}
+    items = [{"type": QUERY_TYPES[field], "key": str(key).strip()}
+             for field, key in (query or {}).items() if str(key or "").strip()]
+    params = {"query_items": items, "filter_accept_status": ACCEPT_ONLY if accepted else ACCEPT_ALL,
+              "search_group_type": list(SEARCH_GROUP_TYPES)}
+    if with_sample:
+        params["free_sample_status"] = 1
+    return params
+
+
+def search(api: ShopApi, status_code: int, page: int, query: Any = None,
+           page_size: int = PAGE_SIZE, accepted: bool = False, with_sample: bool = False) -> Dict[str, Any]:
+    """One page of invitations in one status, optionally narrowed by `query` and the page's
+    two filters (see _search_params): {invitation_list, total, has_more}. page_size at most
+    MAX_PAGE_SIZE."""
     return call(api, "/oec/affiliate/seller/invitation_group/search", {
-        "search_params": _search_params(name), "invitation_group_status": status_code,
+        "search_params": _search_params(query, accepted, with_sample), "invitation_group_status": status_code,
         "page_size": min(page_size, MAX_PAGE_SIZE), "cur_page": page})
+
+
+def find_creators(api: ShopApi, handle: str, size: int = 20) -> List[Dict[str, Any]]:
+    """The creator box's suggestions for what was typed (search/creator, query_by 1 = handle):
+    [{id, handle, nickname}]. The list is then searched by the picked creator's id."""
+    data = call(api, "/oec/affiliate/seller/invitation_group/search/creator", {
+        "size": size, "search_id": "0", "query": handle.strip().lstrip("@"), "query_by": 1})
+    return [{"id": str(c["creator_oec_id"]), "handle": c.get("user_name"), "nickname": c.get("nick_name")}
+            for c in data.get("creators") or [] if c.get("creator_oec_id")]
 
 
 def items(page: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -135,6 +159,38 @@ def send_block(api: ShopApi) -> Optional[str]:
         return None
     reason = _as_int(data.get("reason"))
     return LIMIT_REASONS.get(reason, f"TikTok refuses new invitations (reason {reason})")
+
+
+# ============================================================================ quota and limits
+#
+# Read per shop, never assumed: TikTok sends them per shop, so a shop may have its own.
+
+def quota(api: ShopApi) -> Dict[str, Any]:
+    """How many invitations the shop may still create (seller/quota/info, the call the Sample
+    requests page makes; checked live 26 Sep 2026 on three shops):
+    {can_invite, reason, reason_text, limit_24h, used_24h, active_limit}.
+
+    limit_24h / used_24h: invitations created in the last 24 hours and the cap on them
+    (200 on every shop checked). used_24h counted exactly the invitations created in the 24
+    hours before the call, not since midnight. active_limit: most likely the cap on
+    invitations open at once (effective_group_cnt_limit, 1000 on every shop checked)."""
+    info = call(api, "/oec/affiliate/seller/quota/info", {}).get("invitation_rate_limit_info") or {}
+    reason = _as_int(info.get("reason")) or 0
+    can = bool(info.get("can_invite", True))
+    return {"can_invite": can, "reason": reason,
+            "reason_text": None if can else LIMIT_REASONS.get(reason, f"TikTok refuses new invitations (reason {reason})"),
+            "limit_24h": _as_int(info.get("group_cnt_limit_for24")),
+            "used_24h": _as_int(info.get("current_group_cnt_for24")),
+            "active_limit": _as_int(info.get("effective_group_cnt_limit"))}
+
+
+def invitation_limits(api: ShopApi) -> Dict[str, Optional[int]]:
+    """What one invitation may hold (invitation_group/invitation/limit, the call the create
+    page makes): {max_creators, max_products} -- 50 and 100 on every shop checked. The create
+    page splits creators on max_creators and TikTok refuses more. Invitations made through
+    other channels can already hold more (one had 479 creators, 26 Sep 2026)."""
+    data = call(api, "/oec/affiliate/seller/invitation_group/invitation/limit", None, "GET")
+    return {"max_creators": _as_int(data.get("max_creator_num")), "max_products": _as_int(data.get("max_product_num"))}
 
 
 def _creator_refs(creator_ids: Iterable[str]) -> List[Dict[str, Any]]:
@@ -279,17 +335,6 @@ def terminate(api: ShopApi, invitation_id: str, group_type: int = 1) -> None:
          {"invitation_group_id": str(invitation_id), "group_type": group_type})
 
 
-def add_creators(api: ShopApi, invitation_id: str, creator_ids: List[str]) -> Dict[str, Any]:
-    """Invite more creators into an existing invitation. TikTok answers with counts only:
-    success_cnt went in, conflict_cnt hold one of its products elsewhere, invited_cnt were in."""
-    data = call(api, "/oec/affiliate/seller/invitation_group/creators_add",
-                {"group_id": str(invitation_id), "creator_ids": [str(c) for c in creator_ids]})
-    out = {k: _as_int(data.get(k)) or 0 for k in ("success_cnt", "conflict_cnt", "invited_cnt")}
-    if data.get("quota_limit_info"):
-        out["quota_limit_info"] = data["quota_limit_info"]
-    return out
-
-
 # ============================================================================ create / update
 
 def clean_phone(v: Any) -> str:
@@ -364,11 +409,21 @@ def create(api: ShopApi, group: Dict[str, Any]) -> Any:
                                   q, {"invitation_group": group}, api.headers(create_referer(q.get("oec_seller_id", "")))))
 
 
+# free_sample_rule.sample_setting_type (0 none, 1 manual review, 2 auto-approve). An update
+# without it keeps the invitation's current setting: AUTO -> MANUAL was answered code 0 and
+# ignored until it was sent (live test on Jagoan Resi, 26 Sep 2026).
+SAMPLE_SETTING_TYPES = {None: 0, "MANUAL": 1, "AUTO": 2}
+
+
 def update(api: ShopApi, invitation_id: str, group: Dict[str, Any]) -> Any:
     """Replace an invitation's configuration and creators (the edit page's body: the create
-    object plus the id, and has_flash_sale)."""
+    object plus the id, and has_flash_sale). The free-sample rule carries its
+    sample_setting_type, or TikTok leaves the setting as it was."""
     q = api.common_query()
-    body = {"invitation": {"id": str(invitation_id), **group, "has_flash_sale": False}}
+    rule = dict(group.get("free_sample_rule") or {})
+    kind = ("AUTO" if rule.get("is_free_sample_auto_review") else "MANUAL") if rule.get("has_free_sample") else None
+    rule["sample_setting_type"] = SAMPLE_SETTING_TYPES[kind]
+    body = {"invitation": {"id": str(invitation_id), **group, "free_sample_rule": rule, "has_flash_sale": False}}
     return decode_body(api.signed("POST", f"{tt.AFFILIATE_API}/oec/affiliate/seller/invitation_group/update",
                                   q, body, api.headers(create_referer(q.get("oec_seller_id", "")))))
 
